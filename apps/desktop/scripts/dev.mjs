@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { createServer } from "vite";
 
@@ -15,6 +15,10 @@ if (!cefRoot) {
 }
 const buildDir = process.env.GROUBOT_CEF_BUILD ?? "/tmp/groubot-cef-host-build";
 const executable = resolve(buildDir, "Release/groubot-cef-host");
+try {
+  spawnSync("pkill", ["-TERM", "-x", "groubot-cef-host"], { stdio: "ignore" });
+} catch {}
+await new Promise((resolveWait) => setTimeout(resolveWait, 400));
 const child = spawn(executable, [
   `--url=http://127.0.0.1:${port}/`,
   `--root-cache=${resolve(root, ".groubot/cef-profile")}`,
