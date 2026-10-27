@@ -3,6 +3,13 @@ import type { BrowserState } from "@groubot/browser/types";
 
 const homeTab = { id: "home", kind: "home", url: "groubot://", title: "Groubot", canGoBack: false, canGoForward: false, isLoading: false, active: true } as const;
 
+function normalizeExternalAddress(input: string): string {
+  const value = input.trim();
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(value)) return `https://${value}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(value)}`;
+}
+
 export function installGroubotBridge(): void {
   if (window.groubot) return;
   let state: BrowserState = { tabs: [homeTab], activeTabId: homeTab.id };
@@ -27,7 +34,7 @@ export function installGroubotBridge(): void {
         emit();
         return;
       }
-      window.location.assign(input);
+      window.location.assign(normalizeExternalAddress(input));
     },
     goBack: async () => window.history.back(),
     goForward: async () => window.history.forward(),
