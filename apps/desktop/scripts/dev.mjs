@@ -1,9 +1,34 @@
 import { spawn } from "node:child_process";
-import { readdirSync, readlinkSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readdirSync, readlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "vite";
 
 const root = resolve(import.meta.dirname, "..");
+const lockPath = "/tmp/groubot-cef-dev.lock";
+function acquireLauncherLock() {
+  try {
+    const fd = openSync(lockPath, "wx");
+    writeFileSync(fd, `${process.pid}\n`);
+    closeSync(fd);
+    return true;
+  } catch {
+    if (existsSync(lockPath)) {
+      const previousPid = Number(readFileSync(lockPath, "utf8").trim());
+      try {
+        process.kill(previousPid, 0);
+        return false;
+      } catch {
+        try { unlinkSync(lockPath); } catch {}
+        return acquireLauncherLock();
+      }
+    }
+    return false;
+  }
+}
+if (!acquireLauncherLock()) {
+  console.log("Groubot is already running; no additional window was created.");
+  process.exit(0);
+}
 const vite = await createServer({ configFile: resolve(root, "vite.renderer.config.ts"), server: { host: "127.0.0.1", port: 0 } });
 await vite.listen();
 const address = vite.httpServer.address();
@@ -49,8 +74,10 @@ const child = spawn(executable, [
 const shutdown = async (code = 0) => {
   try { if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGTERM"); else child.kill("SIGTERM"); } catch {}
   await vite.close();
+  try { unlinkSync(lockPath); } catch {}
   process.exit(code);
 };
+process.once("exit", () => { try { unlinkSync(lockPath); } catch {} });
 process.once("SIGINT", () => void shutdown());
 process.once("SIGTERM", () => void shutdown());
 child.once("exit", (code, signal) => void shutdown(code ?? (signal ? 1 : 0)));

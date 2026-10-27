@@ -183,6 +183,9 @@ void CefApplication::HandleBrowserEvent(CefRefPtr<CefBrowser> browser, const std
     }
     return;
   }
+  if (event == "URL" || event == "TITLE" || event == "LOAD_START" || event == "LOAD_END" || event == "LOAD_ERROR") {
+    channel_->Send(event, tab->second + "\t" + value);
+  }
   NotifyShell(event, tab->second, value);
   if (event == "CLOSED") {
     external_tabs_.erase(tab->second);
