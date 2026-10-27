@@ -3,29 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./out/main/main.js",
+  "main": "./dist/renderer/index.html",
   "description": "Groubot desktop application",
   "author": "Groubot contributors",
-  "build": {
-    "appId": "com.groubot.desktop",
-    "productName": "Groubot",
-    "executableName": "groubot",
-    "linux": {
-      "category": "Utility",
-      "target": [
-        "AppImage"
-      ]
-    },
-    "extraResources": [
-      {
-        "from": "../../packages/db/drizzle",
-        "to": "db/drizzle"
-      }
-    ]
-  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "node scripts/generate-agent-assets.mjs && electron-vite build && electron-builder",
+    "build": "node scripts/generate-agent-assets.mjs && vite build --config vite.renderer.config.ts && node scripts/native-cef.mjs build",
+    "native:build": "node scripts/native-cef.mjs build",
+    "native:start": "node scripts/native-cef.mjs start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -46,9 +31,6 @@
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.4",
-    "electron": "^39.8.9",
-    "electron-builder": "^26.0.12",
-    "electron-vite": "^4.0.1",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",
     "vite": "^7.1.7"

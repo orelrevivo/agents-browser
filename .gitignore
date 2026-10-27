@@ -11,3 +11,4 @@ release/
 *.db-wal
 *.tsbuildinfo
 drizzle/meta/
+.groubot/

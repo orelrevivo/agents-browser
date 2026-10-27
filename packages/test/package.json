@@ -1,5 +1,5 @@
 {
-  "name": "groubot-electron-compatibility-test",
+  "name": "groubot-cef-compatibility-test",
   "version": "0.0.0",
   "private": true,
   "description": "Temporary isolated CEF compatibility test",

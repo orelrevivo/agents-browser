@@ -7,6 +7,9 @@ import { AgentsPage } from "./components/AgentsPage";
 import { TabBar } from "./components/TabBar";
 import { useBrowserState } from "./hooks/useBrowserState";
 import "./styles.css";
+import { installGroubotBridge } from "./runtime/groubot-bridge";
+
+installGroubotBridge();
 
 function App() {
   const browserState = useBrowserState();

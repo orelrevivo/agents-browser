@@ -1,40 +1,29 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { createServer } from "vite";
 
-const command = process.platform === "win32" ? "electron-vite.cmd" : "electron-vite";
-const env = { ...process.env };
-
-const generatedAssets = spawnSync(process.execPath, ["scripts/generate-agent-assets.mjs"], { cwd: process.cwd(), stdio: "inherit" });
-if (generatedAssets.status !== 0) process.exit(generatedAssets.status ?? 1);
-
-if (process.platform === "linux" && !env.ELECTRON_OZONE_PLATFORM_HINT) {
-  env.ELECTRON_OZONE_PLATFORM_HINT = "x11";
+const root = resolve(import.meta.dirname, "..");
+const vite = await createServer({ configFile: resolve(root, "vite.renderer.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+await vite.listen();
+const address = vite.httpServer.address();
+const port = typeof address === "object" && address ? address.port : 5173;
+const cefRoot = process.env.GROUBOT_CEF_ROOT ?? "/tmp/cef-test-156.0.14/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_linux64_minimal";
+if (!cefRoot) {
+  console.error("GROUBOT_CEF_ROOT is required. Point it to the tested CEF 156 distribution.");
+  await vite.close();
+  process.exit(1);
 }
-
-if (process.platform === "linux") {
-  env.ELECTRON_EXEC_PATH = resolve("scripts/electron-linux.mjs");
-}
-
-const child = spawn(command, ["dev"], {
-  cwd: process.cwd(),
-  env,
-  stdio: "inherit",
-  detached: process.platform !== "win32",
-});
-
-function stopChild(signal) {
-  if (child.killed) return;
-  try {
-    process.kill(process.platform === "win32" ? child.pid : -child.pid, signal);
-  } catch {
-    child.kill(signal);
-  }
-}
-
-process.on("SIGINT", () => stopChild("SIGINT"));
-process.on("SIGTERM", () => stopChild("SIGTERM"));
-
-child.on("exit", (code, signal) => {
-  if (signal) process.exit(1);
-  else process.exit(code ?? 1);
-});
+const buildDir = process.env.GROUBOT_CEF_BUILD ?? "/tmp/groubot-cef-host-build";
+const executable = resolve(buildDir, "Release/groubot-cef-host");
+const child = spawn(executable, [
+  `--url=http://127.0.0.1:${port}/`,
+  `--root-cache=${resolve(root, ".groubot/cef-profile")}`,
+  `--profile=${resolve(root, ".groubot/cef-profile")}`,
+  `--resources=${resolve(cefRoot, "Resources")}`,
+  `--locales=${resolve(cefRoot, "Resources/locales")}`,
+], { cwd: root, stdio: "inherit", env: process.env });
+const shutdown = async (code = 0) => { child.kill("SIGTERM"); await vite.close(); process.exit(code); };
+process.once("SIGINT", () => void shutdown());
+process.once("SIGTERM", () => void shutdown());
+child.once("exit", (code, signal) => void shutdown(code ?? (signal ? 1 : 0)));
+console.log(`Groubot CEF renderer: http://127.0.0.1:${port}/`);

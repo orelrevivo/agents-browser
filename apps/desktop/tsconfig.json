@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["electron.vite.config.ts", "src", "electron"]
+  "include": ["vite.renderer.config.ts", "src"]
 }
