@@ -1,0 +1,22 @@
+{
+  "name": "@groubot/ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@openai/agents": "^0.1.2",
+    "bufferutil": "^4.1.0",
+    "chrome-remote-interface": "^0.33.3",
+    "openai": "^5.20.1",
+    "utf-8-validate": "^6.0.6",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

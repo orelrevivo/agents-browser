@@ -1,0 +1,55 @@
+{
+  "name": "@groubot/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/main.js",
+  "description": "Groubot desktop application",
+  "author": "Groubot contributors",
+  "build": {
+    "appId": "com.groubot.desktop",
+    "productName": "Groubot",
+    "executableName": "groubot",
+    "linux": {
+      "category": "Utility",
+      "target": [
+        "AppImage"
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "../../packages/db/drizzle",
+        "to": "db/drizzle"
+      }
+    ]
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/generate-agent-assets.mjs && electron-vite build && electron-builder",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@groubot/ai": "workspace:*",
+    "@groubot/db": "workspace:*",
+    "@groubot/ui": "workspace:*",
+    "better-sqlite3": "^12.2.0",
+    "dotenv": "^16.4.7",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.13",
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "electron": "^39.8.9",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.1",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7"
+  }
+}

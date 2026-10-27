@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793075905869,
+      "tag": "0000_medical_lady_vermin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793077740266,
+      "tag": "0001_faulty_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793078818687,
+      "tag": "0002_lazy_sharon_ventura",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793080000000,
+      "tag": "0003_browser_tasks",
+      "breakpoints": true
+    }
+  ]
+}

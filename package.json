@@ -1,0 +1,16 @@
+{
+  "name": "groubot",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.4.1",
+  "scripts": {
+    "dev": "pnpm --filter @groubot/desktop dev",
+    "build": "pnpm --filter @groubot/desktop build",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @groubot/db db:generate",
+    "db:migrate": "pnpm --filter @groubot/db db:migrate"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

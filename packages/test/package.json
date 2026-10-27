@@ -1,0 +1,11 @@
+{
+  "name": "groubot-electron-compatibility-test",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Temporary isolated CEF compatibility test",
+  "scripts": {
+    "configure": "cmake -S . -B build -DCEF_ROOT=/tmp/cef-test-156.0.14/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_linux64_minimal -DCMAKE_BUILD_TYPE=Release -DUSE_SANDBOX=OFF",
+    "build": "cmake --build build --target groubot-cef-test -j2",
+    "start": "./build/Release/groubot-cef-test"
+  }
+}
