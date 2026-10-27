@@ -14,6 +14,7 @@ add_executable(groubot-cef-host
   src/main.cc
   src/cef_application.cc
   src/cef_browser_client.cc
+  src/cef_render_process_handler.cc
   src/command_channel.cc
 )
 target_compile_features(groubot-cef-host PRIVATE cxx_std_20)

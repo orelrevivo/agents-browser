@@ -24,8 +24,14 @@ std::string Argument(int argc, char* argv[], std::string_view name) {
 
 int main(int argc, char* argv[]) {
   CefMainArgs main_args(argc, argv);
+  CefApplication* application = nullptr;
+  CommandChannel channel([&application](const std::string& command, const std::string& value) {
+    if (application) application->HandleCommand(command, value);
+  });
+  CefRefPtr<CefApplication> app = new CefApplication(&channel);
+  application = app.get();
   std::cerr << "[groubot-cef] start" << std::endl;
-  const auto exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
+  const auto exit_code = CefExecuteProcess(main_args, app, nullptr);
   std::cerr << "[groubot-cef] execute-process-returned " << exit_code << std::endl;
   if (exit_code >= 0) return exit_code;
 
@@ -58,12 +64,6 @@ int main(int argc, char* argv[]) {
   }
   if (!resources.empty()) CefString(&settings.resources_dir_path) = resources;
   if (!locales.empty()) CefString(&settings.locales_dir_path) = locales;
-  CefApplication* application = nullptr;
-  CommandChannel channel([&application](const std::string& command, const std::string& value) {
-    if (application) application->HandleCommand(command, value);
-  });
-  auto app = new CefApplication(&channel);
-  application = app;
   std::cerr << "[groubot-cef] initialize" << std::endl;
   if (!CefInitialize(main_args, settings, app, nullptr)) return CefGetExitCode();
   std::cerr << "[groubot-cef] initialized" << std::endl;
