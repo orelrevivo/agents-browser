@@ -17,10 +17,13 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <X11/Xlib.h>
 
 namespace {
 
 constexpr char kInitialUrl[] = "https://claude.ai/";
+Display* g_display = nullptr;
+Window g_parent_window = 0;
 
 class BrowserWindowDelegate;
 
@@ -144,10 +147,22 @@ class BrowserWindowDelegate : public CefWindowDelegate {
 
   void OnWindowCreated(CefRefPtr<CefWindow> window) override {
     std::cerr << "[cef] window-created" << std::endl;
-    // First validate the minimal CEF Views attachment independently of the
-    // optional native toolbar composition below.
+    // The browser view must receive the entire top-level window bounds. Without
+    // a fill layout, CEF creates the window but leaves the browser view at 0x0.
+    window->SetToFillLayout();
     window->AddChildView(browser_view_);
+    window->SetSize(CefSize(1200, 800));
+    const auto native_window = window->GetWindowHandle();
+    if (native_window) {
+      auto* display = XOpenDisplay(nullptr);
+      if (display) {
+        XMoveResizeWindow(display, native_window, 100, 100, 1200, 800);
+        XFlush(display);
+        XCloseDisplay(display);
+      }
+    }
     window->Show();
+    window->SetBounds(CefRect(100, 100, 1200, 800));
     return;
     auto toolbar = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings toolbar_settings;
@@ -210,10 +225,9 @@ class BrowserApp : public CefApp, public CefBrowserProcessHandler {
     CefString(&context_settings.cache_path) = std::string("/tmp/groubot-cef-root-cache-2-20261027/profile");
     context_settings.persist_session_cookies = true;
     auto request_context = CefRequestContext::CreateContext(context_settings, nullptr);
-    auto browser_view = CefBrowserView::CreateBrowserView(
-        handler, kInitialUrl, browser_settings, nullptr, request_context,
-        new BrowserViewDelegate(handler));
-    CefWindow::CreateTopLevelWindow(new BrowserWindowDelegate(browser_view, handler, false));
+    CefWindowInfo window_info;
+    window_info.SetAsChild(g_parent_window, CefRect(0, 0, 1200, 800));
+    CefBrowserHost::CreateBrowser(window_info, handler, kInitialUrl, browser_settings, nullptr, request_context);
   }
 
  private:
@@ -234,6 +248,18 @@ int main(int argc, char* argv[]) {
   const int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
   if (exit_code >= 0) return exit_code;
 
+  g_display = XOpenDisplay(nullptr);
+  if (!g_display) {
+    std::cerr << "[cef] failed-to-open-x11-display" << std::endl;
+    return 1;
+  }
+  const auto root_window = DefaultRootWindow(g_display);
+  g_parent_window = XCreateSimpleWindow(g_display, root_window, 100, 100, 1200, 800, 0, 0, 0);
+  XStoreName(g_display, g_parent_window, "Groubot CEF Test");
+  XSelectInput(g_display, g_parent_window, ExposureMask | StructureNotifyMask | KeyPressMask | ButtonPressMask);
+  XMapWindow(g_display, g_parent_window);
+  XFlush(g_display);
+
   CefSettings settings;
   settings.no_sandbox = true;
   settings.log_severity = LOGSEVERITY_INFO;
@@ -245,5 +271,7 @@ int main(int argc, char* argv[]) {
   if (!CefInitialize(main_args, settings, app, nullptr)) return CefGetExitCode();
   CefRunMessageLoop();
   CefShutdown();
+  XDestroyWindow(g_display, g_parent_window);
+  XCloseDisplay(g_display);
   return 0;
 }

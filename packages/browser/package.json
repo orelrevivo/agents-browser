@@ -1,0 +1,7 @@
+{
+  "name": "@groubot/browser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native browser runtime boundaries for Groubot",
+  "type": "module"
+}

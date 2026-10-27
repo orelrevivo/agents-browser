@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { BrowserWindow, session as electronSession, WebContentsView, type WebContents } from "electron";
+import { app, BrowserWindow, session as electronSession, WebContentsView, type WebContents } from "electron";
+import { join } from "node:path";
+import { CefHost } from "./cef-host";
 import type { BrowserState, BrowserTabState } from "./types";
 
 export const CHROME_HEIGHT = 104;
@@ -9,6 +11,7 @@ interface BrowserTab {
   id: string;
   kind: "home" | "chat" | "agents" | "web";
   view?: WebContentsView;
+  cef?: CefHost;
   title: string;
   url: string;
   isLoading: boolean;
@@ -19,6 +22,8 @@ interface BrowserTab {
   isUnresponsive?: boolean;
   requiresUserAction?: boolean;
   userActionMessage?: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
   verificationPoll?: ReturnType<typeof setInterval>;
 }
 
@@ -48,11 +53,14 @@ export class BrowserSession {
     const tab: BrowserTab = {
       id: randomUUID(),
       kind: isInternal ? internalUrl.kind : "web",
-      view: isInternal ? undefined : this.createWebView(),
+      view: isInternal || this.usesNativeCef() ? undefined : this.createWebView(),
+      cef: isInternal || !this.usesNativeCef() ? undefined : new CefHost(this.window),
       title: isHome ? "Groubot" : internalUrl?.kind === "chat" ? "Chat" : internalUrl?.kind === "agents" ? "Agents" : "New tab",
       url: isInternal ? internalUrl.url : input,
       isLoading: !isInternal,
       returnToHome: false,
+      canGoBack: false,
+      canGoForward: false,
     };
 
     this.tabs.set(tab.id, tab);
@@ -62,7 +70,14 @@ export class BrowserSession {
     }
     if (activate) await this.selectTab(tab.id);
     else this.layout();
-    if (tab.view) {
+    if (tab.cef) {
+      try {
+        tab.cef.start({ url: normalizeAddress(input), bounds: this.browserBounds(), profilePath: join(app.getPath("userData"), "cef-browser-profile") });
+        this.attachCefEvents(tab);
+      } catch (error) {
+        this.markTabError(tab, error);
+      }
+    } else if (tab.view) {
       try {
         await tab.view.webContents.loadURL(normalizeAddress(input));
       } catch (error) {
@@ -95,6 +110,7 @@ export class BrowserSession {
 
   async refreshHumanVerificationState(tabId: string): Promise<string | undefined> {
     const tab = this.tabs.get(tabId);
+    if (!tab || tab.cef) return undefined;
     if (!tab?.view || tab.view.webContents.isDestroyed()) return undefined;
     let pageSignals = "";
     try {
@@ -110,6 +126,7 @@ export class BrowserSession {
   async navigateTab(tabId: string, url: string): Promise<{ tabId: string; url: string }> {
     const tab = this.tabs.get(tabId);
     if (!tab) throw new Error("Browser tab not found");
+    if (tab.cef) throw new Error("Agent browser inspection is not available in the initial native CEF milestone");
     if (!tab.view) throw new Error("This internal Groubot page cannot be controlled as a website");
     tab.returnToHome = false;
     tab.internalBackUrl = undefined;
@@ -192,6 +209,7 @@ export class BrowserSession {
       if (tab.verificationPoll) clearInterval(tab.verificationPoll);
       this.closeWebView(tab.view);
     }
+    tab.cef?.close();
     this.tabs.delete(tabId);
 
     if (this.tabs.size === 0) {
@@ -219,12 +237,18 @@ export class BrowserSession {
     }
 
     const openedFromHome = !tab.view;
-    if (!tab.view) {
+    if (!tab.view && !tab.cef) {
       tab.kind = "web";
       tab.title = "New tab";
-      tab.view = this.createWebView();
-      this.window.contentView.addChildView(tab.view);
-      this.attachTabEvents(tab);
+      if (this.usesNativeCef()) {
+        tab.cef = new CefHost(this.window);
+        tab.cef.start({ url: normalizeAddress(input.trim()), bounds: this.browserBounds(), profilePath: join(app.getPath("userData"), "cef-browser-profile") });
+        this.attachCefEvents(tab);
+      } else {
+        tab.view = this.createWebView();
+        this.window.contentView.addChildView(tab.view);
+        this.attachTabEvents(tab);
+      }
       this.layout();
     }
 
@@ -232,7 +256,11 @@ export class BrowserSession {
     tab.internalBackUrl = undefined;
     tab.isLoading = true;
     tab.lastError = undefined;
-    void tab.view.webContents.loadURL(normalizeAddress(input.trim())).catch((error: unknown) => this.markTabError(tab, error));
+    if (tab.cef) {
+      tab.cef.navigate(normalizeAddress(input.trim()));
+    } else if (tab.view) {
+      void tab.view.webContents.loadURL(normalizeAddress(input.trim())).catch((error: unknown) => this.markTabError(tab, error));
+    }
     this.emitState();
   }
 
@@ -244,6 +272,7 @@ export class BrowserSession {
       contents.navigationHistory.goBack();
       return;
     }
+    if (tab.cef) { tab.cef.goBack(); return; }
     if (tab.returnToHome) this.restoreHome(tab);
     else if (tab.internalBackUrl) {
       const previousRoute = parseInternalUrl(tab.internalBackUrl);
@@ -255,12 +284,18 @@ export class BrowserSession {
     const tab = this.getActiveTab();
     const contents = tab ? this.getLiveWebContents(tab) : undefined;
     if (contents?.navigationHistory.canGoForward()) contents.navigationHistory.goForward();
+    else if (tab?.cef) tab.cef.goForward();
   }
 
   reload(): void {
     const tab = this.getActiveTab();
     if (!tab) return;
     tab.isLoading = true;
+    if (!tab.view && tab.cef) {
+      tab.cef.reload();
+      this.emitState();
+      return;
+    }
     if (!tab.view) {
       this.emitState();
       void this.window.webContents.reload();
@@ -366,6 +401,29 @@ export class BrowserSession {
     });
   }
 
+  private attachCefEvents(tab: BrowserTab): void {
+    tab.cef?.onEvent((event) => {
+      if (event.type === "LOAD_START") tab.isLoading = true;
+      if (event.type === "LOAD_END") tab.isLoading = false;
+      if (event.type === "TITLE" && event.value) tab.title = event.value || "New tab";
+      if (event.type === "URL" && event.value) tab.url = event.value;
+      if (event.type === "HISTORY") {
+        const [back, forward] = event.value.split("\t");
+        tab.canGoBack = back === "1";
+        tab.canGoForward = forward === "1";
+      }
+      if (event.type === "LOAD_ERROR") {
+        tab.isLoading = false;
+        tab.lastError = event.value;
+      }
+      if (event.type === "error") {
+        tab.isLoading = false;
+        tab.lastError = event.message;
+      }
+      this.emitState();
+    });
+  }
+
   private getActiveTab(): BrowserTab | undefined {
     return this.activeTabId ? this.tabs.get(this.activeTabId) : undefined;
   }
@@ -386,8 +444,8 @@ export class BrowserSession {
       title: tab.title,
       url: tab.url,
       isLoading: tab.isLoading,
-      canGoBack: tab.returnToHome || tab.internalBackUrl !== undefined || Boolean(contents?.navigationHistory?.canGoBack()),
-      canGoForward: Boolean(contents?.navigationHistory?.canGoForward()),
+      canGoBack: tab.cef ? tab.canGoBack : (tab.returnToHome || tab.internalBackUrl !== undefined || Boolean(contents?.navigationHistory?.canGoBack())),
+      canGoForward: tab.cef ? tab.canGoForward : Boolean(contents?.navigationHistory?.canGoForward()),
       active: tab.id === this.activeTabId,
       controlledByTaskId: tab.controlledByTaskId,
       lastError: tab.lastError,
@@ -404,6 +462,9 @@ export class BrowserSession {
         try { tab.view.setBounds({ x: 0, y: CHROME_HEIGHT, width, height: Math.max(0, height - CHROME_HEIGHT) }); } catch (error) { this.markTabError(tab, error); }
       } else if (tab.view) {
         try { tab.view.setBounds({ x: 0, y: CHROME_HEIGHT, width: 0, height: 0 }); } catch (error) { this.markTabError(tab, error); }
+      }
+      if (tab.cef) {
+        try { tab.cef.resize(this.browserBounds()); } catch (error) { this.markTabError(tab, error); }
       }
     }
   }
@@ -490,6 +551,7 @@ export class BrowserSession {
     for (const tab of this.tabs.values()) {
       if (tab.verificationPoll) clearInterval(tab.verificationPoll);
       if (tab.view) this.closeWebView(tab.view);
+      if (tab.cef) tab.cef.close();
     }
     this.tabs.clear();
   }
@@ -542,6 +604,15 @@ export class BrowserSession {
         sandbox: true,
       },
     });
+  }
+
+  private usesNativeCef(): boolean {
+    return process.platform === "linux" && process.env.GROUBOT_CEF === "1";
+  }
+
+  private browserBounds(): { x: number; y: number; width: number; height: number } {
+    const [width, height] = this.window.getContentSize();
+    return { x: 0, y: CHROME_HEIGHT, width, height: Math.max(0, height - CHROME_HEIGHT) };
   }
 
   private async readAccessibilityTree(tab: BrowserTab): Promise<Array<{ tag: string; text: string; selector: string }>> {
