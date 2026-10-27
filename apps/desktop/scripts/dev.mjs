@@ -1,4 +1,5 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { readdirSync, readlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "vite";
 
@@ -15,10 +16,29 @@ if (!cefRoot) {
 }
 const buildDir = process.env.GROUBOT_CEF_BUILD ?? "/tmp/groubot-cef-host-build";
 const executable = resolve(buildDir, "Release/groubot-cef-host");
-try {
-  spawnSync("pkill", ["-TERM", "-x", "groubot-cef-host"], { stdio: "ignore" });
-} catch {}
+function findHostPids() {
+  return readdirSync("/proc", { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\d+$/.test(entry.name))
+    .flatMap((entry) => {
+      try {
+        return readlinkSync(`/proc/${entry.name}/exe`) === executable ? [Number(entry.name)] : [];
+      } catch {
+        return [];
+      }
+    });
+}
+
+for (const pid of findHostPids()) {
+  if (pid !== process.pid) {
+    try { process.kill(pid, "SIGTERM"); } catch {}
+  }
+}
 await new Promise((resolveWait) => setTimeout(resolveWait, 400));
+for (const pid of findHostPids()) {
+  if (pid !== process.pid) {
+    try { process.kill(pid, "SIGKILL"); } catch {}
+  }
+}
 const child = spawn(executable, [
   `--url=http://127.0.0.1:${port}/`,
   `--root-cache=${resolve(root, ".groubot/cef-profile")}`,
