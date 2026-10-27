@@ -1,4 +1,4 @@
-import type { BrowserState } from "../../../../electron/browser/types";
+import type { BrowserState } from "@groubot/browser/types";
 import { Button } from "@groubot/ui";
 import { Globe2, Plus, Sparkles, X } from "./icons";
 import { AlertTriangle, Bot } from "lucide-react";

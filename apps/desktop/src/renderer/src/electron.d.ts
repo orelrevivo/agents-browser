@@ -1,4 +1,4 @@
-import type { BrowserState } from "../../../electron/browser/types";
+import type { BrowserState } from "@groubot/browser/types";
 import type { Agent, AgentInput, BrowserTask, ChatMessage, Conversation, ConversationWithMessages, Memory } from "@groubot/db";
 
 interface GroubotBrowserApi {

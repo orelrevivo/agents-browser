@@ -171,6 +171,9 @@ importers:
       '@groubot/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@groubot/browser':
+        specifier: workspace:*
+        version: link:../../packages/browser
       '@groubot/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -278,6 +281,28 @@ importers:
       utf-8-validate:
         specifier: ^6.0.6
         version: 6.0.6
+      zod:
+        specifier: ^4.1.11
+        version: 4.6.7
+    devDependencies:
+      '@types/node':
+        specifier: ^24.5.2
+        version: 24.19.2
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+  packages/backend:
+    dependencies:
+      '@groubot/ai':
+        specifier: workspace:*
+        version: link:../ai
+      '@groubot/db':
+        specifier: workspace:*
+        version: link:../db
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
       zod:
         specifier: ^4.1.11
         version: 4.6.7

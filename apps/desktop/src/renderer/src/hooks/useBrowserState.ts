@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { BrowserState } from "../../../../electron/browser/types";
+import type { BrowserState } from "@groubot/browser/types";
 
 const initialBrowserState: BrowserState = { tabs: [], activeTabId: null };
 

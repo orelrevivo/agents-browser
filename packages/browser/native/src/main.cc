@@ -3,9 +3,11 @@
 #include "include/cef_app.h"
 
 #include <filesystem>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <X11/Xlib.h>
 
 namespace {
 
@@ -26,6 +28,22 @@ int main(int argc, char* argv[]) {
   const auto exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
   std::cerr << "[groubot-cef] execute-process-returned " << exit_code << std::endl;
   if (exit_code >= 0) return exit_code;
+
+  Display* display = nullptr;
+  Window parent_window = static_cast<Window>(std::strtoull(Argument(argc, argv, "parent-window").c_str(), nullptr, 10));
+  if (!parent_window) {
+    display = XOpenDisplay(nullptr);
+    if (!display) {
+      std::cerr << "[groubot-cef] unable-to-open-x11-display" << std::endl;
+      return 1;
+    }
+    parent_window = XCreateSimpleWindow(display, DefaultRootWindow(display), 100, 100, 1440, 900, 0, 0, 0);
+    XStoreName(display, parent_window, "Groubot");
+    XSelectInput(display, parent_window, ExposureMask | StructureNotifyMask | KeyPressMask | ButtonPressMask);
+    XMapWindow(display, parent_window);
+    XFlush(display);
+    setenv("GROUBOT_CEF_PARENT_WINDOW", std::to_string(parent_window).c_str(), 1);
+  }
 
   CefSettings settings;
   std::cerr << "[groubot-cef] settings-created" << std::endl;
@@ -52,5 +70,9 @@ int main(int argc, char* argv[]) {
   channel.Start();
   CefRunMessageLoop();
   CefShutdown();
+  if (display) {
+    XDestroyWindow(display, parent_window);
+    XCloseDisplay(display);
+  }
   return 0;
 }

@@ -29,6 +29,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@groubot/browser": "workspace:*",
     "@groubot/ai": "workspace:*",
     "@groubot/db": "workspace:*",
     "@groubot/ui": "workspace:*",

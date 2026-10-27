@@ -2,7 +2,7 @@ import type { FormEvent } from "react";
 import { Button, Input, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@groubot/ui";
 import { Bot } from "lucide-react";
 import type { RefObject } from "react";
-import type { BrowserState } from "../../../../electron/browser/types";
+import type { BrowserState } from "@groubot/browser/types";
 import { Chevron, ReloadIcon, SearchIcon } from "./icons";
 import { ToolbarButton } from "./ToolbarButton";
 

@@ -48,7 +48,11 @@ void CefApplication::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
   std::cerr << "[groubot-cef] context-initialized" << std::endl;
   auto command_line = CefCommandLine::GetGlobalCommandLine();
-  const auto parent_window = static_cast<CefWindowHandle>(Argument(command_line, "parent-window"));
+  auto parent_window = static_cast<CefWindowHandle>(Argument(command_line, "parent-window"));
+  if (!parent_window) {
+    const auto* environment_window = std::getenv("GROUBOT_CEF_PARENT_WINDOW");
+    if (environment_window) parent_window = static_cast<CefWindowHandle>(std::strtoull(environment_window, nullptr, 10));
+  }
   const auto x = static_cast<int>(Argument(command_line, "x"));
   const auto y = static_cast<int>(Argument(command_line, "y"));
   const auto width = static_cast<int>(Argument(command_line, "width", 800));
