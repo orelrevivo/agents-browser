@@ -37,6 +37,9 @@ std::string StringArgument(const CefRefPtr<CefCommandLine>& command_line, const 
 CefApplication::CefApplication(CommandChannel* channel) : channel_(channel) {}
 
 void CefApplication::OnBeforeCommandLineProcessing(const CefString&, CefRefPtr<CefCommandLine> command_line) {
+  // The native host embeds the browser in an X11 window. Keep Chromium on the
+  // same platform instead of allowing a Wayland/Vulkan surface underneath it.
+  command_line->AppendSwitchWithValue("ozone-platform", "x11");
   const auto* disable_gpu = std::getenv("GROUBOT_DISABLE_GPU");
   if (disable_gpu && std::string(disable_gpu) == "1") {
     command_line->AppendSwitch("disable-gpu");
