@@ -21,8 +21,12 @@ const child = spawn(executable, [
   `--profile=${resolve(root, ".groubot/cef-profile")}`,
   `--resources=${resolve(cefRoot, "Resources")}`,
   `--locales=${resolve(cefRoot, "Resources/locales")}`,
-], { cwd: root, stdio: "inherit", env: process.env });
-const shutdown = async (code = 0) => { child.kill("SIGTERM"); await vite.close(); process.exit(code); };
+], { cwd: root, stdio: "inherit", env: process.env, detached: process.platform !== "win32" });
+const shutdown = async (code = 0) => {
+  try { if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGTERM"); else child.kill("SIGTERM"); } catch {}
+  await vite.close();
+  process.exit(code);
+};
 process.once("SIGINT", () => void shutdown());
 process.once("SIGTERM", () => void shutdown());
 child.once("exit", (code, signal) => void shutdown(code ?? (signal ? 1 : 0)));
