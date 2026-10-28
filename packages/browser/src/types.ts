@@ -1,8 +1,18 @@
 export interface BrowserTabState {
   id: string;
-  kind: "home" | "chat" | "agents" | "web";
+  kind:
+    | "home"
+    | "chat"
+    | "agents"
+    | "skills"
+    | "marketplace"
+    | "group"
+    | "preferences"
+    | "downloads"
+    | "web";
   title: string;
   url: string;
+  faviconUrl?: string;
   isLoading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
@@ -17,6 +27,14 @@ export interface BrowserTabState {
 export interface BrowserState {
   tabs: BrowserTabState[];
   activeTabId: string | null;
+}
+
+export interface BrowserDownloadState {
+  id: string;
+  fileName: string;
+  progress: number;
+  status: "downloading" | "paused" | "completed" | "failed";
+  remainingText?: string;
 }
 
 export type BrowserCommand =

@@ -24,6 +24,8 @@
   --input: 0 0% 25%;
   --ring: 204 100% 50%;
   --chrome-surface: 258 22% 18%;
+  --browser-frame: 0 0% 7%;
+  --overlay: 0 0% 0%;
   --radius: 0.75rem;
 }
 
@@ -48,6 +50,8 @@
   --input: 214 20% 86%;
   --ring: 215 20% 58%;
   --chrome-surface: 210 20% 94%;
+  --browser-frame: 210 20% 91%;
+  --overlay: 0 0% 100%;
 }
 
 @theme inline {
@@ -70,6 +74,8 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
   --color-chrome-surface: hsl(var(--chrome-surface));
+  --color-browser-frame: hsl(var(--browser-frame));
+  --color-overlay: hsl(var(--overlay));
   --radius-sm: calc(var(--radius) - 0.35rem);
   --radius-md: calc(var(--radius) - 0.2rem);
   --radius-lg: var(--radius);

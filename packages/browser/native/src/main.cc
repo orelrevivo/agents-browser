@@ -7,6 +7,9 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include <X11/Xlib.h>
 
 namespace {
@@ -23,15 +26,20 @@ std::string Argument(int argc, char* argv[], std::string_view name) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  XInitThreads();
   CefMainArgs main_args(argc, argv);
   CefApplication* application = nullptr;
   CommandChannel channel([&application](const std::string& command, const std::string& value) {
     if (application) application->HandleCommand(command, value);
   });
-  CefRefPtr<CefApplication> app = new CefApplication(&channel);
+  CefRefPtr<CefApplication> app = new CefApplication(&channel, argc, argv);
   application = app.get();
   std::cerr << "[groubot-cef] start" << std::endl;
-  const auto exit_code = CefExecuteProcess(main_args, app, nullptr);
+  // Subprocesses must use the minimal CEF bootstrap. The full application
+  // object is installed for the browser process after CefExecuteProcess;
+  // passing it here causes CEF 156's child bootstrap to fail before ICU is
+  // initialized on some Linux installations.
+  const auto exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
   std::cerr << "[groubot-cef] execute-process-returned " << exit_code << std::endl;
   if (exit_code >= 0) return exit_code;
 
@@ -68,7 +76,30 @@ int main(int argc, char* argv[]) {
   if (!CefInitialize(main_args, settings, app, nullptr)) return CefGetExitCode();
   std::cerr << "[groubot-cef] initialized" << std::endl;
   channel.Start();
+  std::atomic_bool resize_watcher_running{true};
+  Display* resize_display = XOpenDisplay(nullptr);
+  std::thread resize_watcher([&application, &resize_watcher_running, resize_display, parent_window]() {
+    if (!resize_display || !parent_window) return;
+    XSelectInput(resize_display, parent_window, StructureNotifyMask);
+    while (resize_watcher_running.load()) {
+      while (XPending(resize_display) > 0) {
+        XEvent event{};
+        XNextEvent(resize_display, &event);
+        if (event.type == ConfigureNotify && event.xconfigure.width > 0 && event.xconfigure.height > 0) {
+          const auto value = std::to_string(event.xconfigure.x) + "\t" +
+                             std::to_string(event.xconfigure.y) + "\t" +
+                             std::to_string(event.xconfigure.width) + "\t" +
+                             std::to_string(event.xconfigure.height);
+          if (application) application->HandleCommand("RESIZE", value);
+        }
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
+  });
   CefRunMessageLoop();
+  resize_watcher_running.store(false);
+  if (resize_watcher.joinable()) resize_watcher.join();
+  if (resize_display) XCloseDisplay(resize_display);
   CefShutdown();
   if (display) {
     XDestroyWindow(display, parent_window);

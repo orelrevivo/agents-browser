@@ -15,15 +15,37 @@ export const agents = sqliteTable("agents", {
   modelSettings: text("model_settings").notNull().default("{}"),
   toolPermissions: text("tool_permissions").notNull().default("{}"),
   memoryPreferences: text("memory_preferences").notNull().default("{}"),
-  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+  isDefault: integer("is_default", { mode: "boolean" })
+    .notNull()
+    .default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const agentGroups = sqliteTable("agent_groups", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  allowAgentMessages: integer("allow_agent_messages", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const agentGroupMembers = sqliteTable("agent_group_members", {
+  groupId: text("group_id").notNull(),
+  agentId: text("agent_id").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
 
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey(),
   title: text("title").notNull().default("New chat"),
   agentId: text("agent_id"),
+  groupId: text("group_id"),
+  permissionMode: text("permission_mode").notNull().default("ask"),
+  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -33,6 +55,7 @@ export const messages = sqliteTable("messages", {
   conversationId: text("conversation_id").notNull(),
   role: text("role").notNull(),
   content: text("content").notNull(),
+  agentId: text("agent_id"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
 
@@ -54,6 +77,18 @@ export const browserTasks = sqliteTable("browser_tasks", {
   tabIds: text("tab_ids").notNull().default("[]"),
   progress: text("progress").notNull().default("[]"),
   error: text("error"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const skills = sqliteTable("skills", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  content: text("content").notNull(),
+  creator: text("creator").notNull().default("You"),
+  source: text("source").notNull().default("manual"),
+  sourceUrl: text("source_url"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });

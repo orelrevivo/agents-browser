@@ -12,7 +12,7 @@ class NativeCommandHandler final : public CefV8Handler {
  public:
   bool Execute(const CefString&, CefRefPtr<CefV8Value>,
                const CefV8ValueList& arguments,
-               CefRefPtr<CefV8Value>&, CefString&) override {
+               CefRefPtr<CefV8Value>& retval, CefString&) override {
     CEF_REQUIRE_RENDERER_THREAD();
     if (arguments.empty() || !arguments[0]->IsString()) return false;
 
@@ -23,6 +23,7 @@ class NativeCommandHandler final : public CefV8Handler {
                            ? arguments[1]->GetStringValue()
                            : "");
     CefV8Context::GetCurrentContext()->GetBrowser()->GetMainFrame()->SendProcessMessage(PID_BROWSER, message);
+    retval = CefV8Value::CreateBool(true);
     return true;
   }
 
@@ -40,4 +41,32 @@ void GroubotRenderProcessHandler::OnContextCreated(CefRefPtr<CefBrowser>,
   auto native = CefV8Value::CreateObject(nullptr, nullptr);
   native->SetValue("command", CefV8Value::CreateFunction("command", new NativeCommandHandler()), V8_PROPERTY_ATTRIBUTE_NONE);
   object->SetValue("groubotNative", native, V8_PROPERTY_ATTRIBUTE_NONE);
+}
+
+bool GroubotRenderProcessHandler::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                                           CefRefPtr<CefFrame> frame,
+                                                           CefProcessId source_process,
+                                                           CefRefPtr<CefProcessMessage> message) {
+  CEF_REQUIRE_RENDERER_THREAD();
+  if (source_process != PID_BROWSER || message->GetName() != "groubot.evaluate") return false;
+  const auto args = message->GetArgumentList();
+  const auto request_id = args->GetString(0);
+  const auto script = args->GetString(1).ToString();
+  auto result_message = CefProcessMessage::Create("groubot.browser-result");
+  auto result_args = result_message->GetArgumentList();
+  result_args->SetString(0, request_id);
+  CefRefPtr<CefV8Exception> exception;
+  CefRefPtr<CefV8Value> result;
+  bool ok = false;
+  std::string json;
+  auto context = frame->GetV8Context();
+  if (context && context->Enter()) {
+    ok = context->Eval(CefString("JSON.stringify((" + script + "))"), "groubot://browser-tool", 0, result, exception) && result && result->IsString();
+    if (ok) json = result->GetStringValue().ToString();
+    context->Exit();
+  }
+  result_args->SetBool(1, ok);
+  result_args->SetString(2, ok ? json : (exception ? exception->GetMessage().ToString() : "Page evaluation failed."));
+  frame->SendProcessMessage(PID_BROWSER, result_message);
+  return true;
 }

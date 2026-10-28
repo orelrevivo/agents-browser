@@ -12,3 +12,5 @@ release/
 *.tsbuildinfo
 drizzle/meta/
 .groubot/
+annotate/
+**/annotate/

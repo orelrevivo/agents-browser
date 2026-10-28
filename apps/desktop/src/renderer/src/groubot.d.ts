@@ -1,5 +1,21 @@
-import type { BrowserState } from "@groubot/browser/types";
-import type { Agent, AgentInput, BrowserTask, ChatMessage, Conversation, ConversationWithMessages, Memory } from "@groubot/db";
+import type {
+  BrowserDownloadState,
+  BrowserState,
+} from "@groubot/browser/types";
+import type {
+  Agent,
+  AgentGroup,
+  AgentGroupInput,
+  AgentGroupUpdate,
+  AgentInput,
+  BrowserTask,
+  ChatMessage,
+  Conversation,
+  ConversationWithMessages,
+  Memory,
+  Skill,
+  SkillInput,
+} from "@groubot/db";
 
 interface GroubotBrowserApi {
   getState: () => Promise<BrowserState>;
@@ -10,6 +26,18 @@ interface GroubotBrowserApi {
   goBack: () => Promise<void>;
   goForward: () => Promise<void>;
   reload: () => Promise<void>;
+  newWindow: () => Promise<void>;
+  setLayout: (layout: "top" | "sidebar") => Promise<void>;
+  setOverlayVisible: (
+    visible: boolean,
+    bounds?: { x: number; y: number; width: number; height: number },
+  ) => Promise<void>;
+  pauseDownload: (downloadId: string) => Promise<void>;
+  cancelDownload: (downloadId: string) => Promise<void>;
+  getDownloads: () => Promise<BrowserDownloadState[]>;
+  onDownloadsChanged: (
+    listener: (downloads: BrowserDownloadState[]) => void,
+  ) => () => void;
   onStateChanged: (listener: (state: BrowserState) => void) => () => void;
 }
 
@@ -22,16 +50,53 @@ interface GroubotAgentsApi {
   setDefault: (id: string) => Promise<Agent>;
 }
 
+interface GroubotGroupsApi {
+  list: () => Promise<AgentGroup[]>;
+  get: (id: string) => Promise<AgentGroup | undefined>;
+  create: (input: AgentGroupInput) => Promise<AgentGroup>;
+  update: (id: string, input: AgentGroupUpdate) => Promise<AgentGroup>;
+  remove: (id: string) => Promise<void>;
+}
+
+interface GroubotSkillsApi {
+  list: () => Promise<Skill[]>;
+  create: (input: SkillInput) => Promise<Skill>;
+  importGithub: (input: {
+    name: string;
+    description: string;
+    url: string;
+  }) => Promise<Skill>;
+  remove: (id: string) => Promise<void>;
+}
+
 interface GroubotChatsApi {
   list: () => Promise<Conversation[]>;
   get: (id: string) => Promise<ConversationWithMessages | undefined>;
-  create: (agentId?: string | null) => Promise<Conversation>;
-  sendMessage: (input: { conversationId: string; content: string }) => Promise<{ requestId: string; message: ChatMessage; taskId?: string }>;
+  create: (
+    agentId?: string | null,
+    groupId?: string | null,
+    permissionMode?: "ask" | "full",
+  ) => Promise<Conversation>;
+  sendMessage: (input: {
+    conversationId: string;
+    content: string;
+  }) => Promise<{ requestId: string; message: ChatMessage; taskId?: string }>;
   cancel: (requestId: string) => Promise<string>;
   onStream: (listener: (event: ChatStreamEvent) => void) => () => void;
-  respondToApproval: (approvalId: string, approved: boolean) => Promise<boolean>;
-  onApprovalRequest: (listener: (request: ApprovalRequest) => void) => () => void;
+  respondToApproval: (
+    approvalId: string,
+    approved: boolean,
+  ) => Promise<boolean>;
+  onApprovalRequest: (
+    listener: (request: ApprovalRequest) => void,
+  ) => () => void;
   rename: (input: { id: string; title: string }) => Promise<Conversation>;
+  attachToGroup: (input: { id: string; groupId: string }) => Promise<Conversation>;
+  setPinned: (input: { id: string; pinned: boolean }) => Promise<Conversation>;
+  setPermissionMode: (input: {
+    id: string;
+    permissionMode: "ask" | "full";
+  }) => Promise<Conversation>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -43,13 +108,26 @@ interface GroubotMemoriesApi {
 }
 
 interface GroubotAIConfigApi {
-  getConfig: () => Promise<{ model: string; apiKeyConfigured: boolean; webSearchEnabled: boolean; memoryEnabled: boolean }>;
+  getConfig: () => Promise<{
+    model: string;
+    apiKeyConfigured: boolean;
+    webSearchEnabled: boolean;
+    memoryEnabled: boolean;
+  }>;
 }
 
 interface ChatStreamEvent {
   requestId: string;
   conversationId: string;
-  type: "started" | "delta" | "completed" | "cancelled" | "error" | "tool_activity" | "waiting_for_human";
+  type:
+    | "started"
+    | "delta"
+    | "completed"
+    | "cancelled"
+    | "error"
+    | "tool_activity"
+    | "approval_request"
+    | "waiting_for_human";
   delta?: string;
   content?: string;
   code?: string;
@@ -57,12 +135,20 @@ interface ChatStreamEvent {
   toolName?: string;
   status?: "started" | "finished";
   taskId?: string;
+  approvalId?: string;
+  description?: string;
+  input?: Record<string, unknown>;
 }
 
 interface GroubotBrowserTasksApi {
   list: (conversationId?: string) => Promise<BrowserTask[]>;
   get: (taskId: string) => Promise<BrowserTask | undefined>;
-  resume: (taskId: string) => Promise<{ resumed: boolean; requestId?: string; taskId?: string; reason?: string }>;
+  resume: (taskId: string) => Promise<{
+    resumed: boolean;
+    requestId?: string;
+    taskId?: string;
+    reason?: string;
+  }>;
 }
 
 interface ApprovalRequest {
@@ -78,6 +164,8 @@ declare global {
       version: string;
       browser: GroubotBrowserApi;
       agents: GroubotAgentsApi;
+      groups: GroubotGroupsApi;
+      skills: GroubotSkillsApi;
       chats: GroubotChatsApi;
       browserTasks: GroubotBrowserTasksApi;
       memories: GroubotMemoriesApi;

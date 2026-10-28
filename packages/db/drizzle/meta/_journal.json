@@ -29,6 +29,48 @@
       "when": 1793080000000,
       "tag": "0003_browser_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793081000000,
+      "tag": "0004_skills",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793082000000,
+      "tag": "0005_pinned_chats",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793085600000,
+      "tag": "0006_agent_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793086200000,
+      "tag": "0007_group_pinned",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793086800000,
+      "tag": "0008_message_agent",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793087400000,
+      "tag": "0009_conversation_permissions",
+      "breakpoints": true
     }
   ]
 }

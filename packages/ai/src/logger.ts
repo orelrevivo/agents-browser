@@ -1,5 +1,11 @@
 type LogValue = string | number | boolean | null | undefined | Record<string, unknown> | string[];
 
+// The development backend is sometimes launched from a terminal that closes
+// its output pipe when the CEF shell is restarted. An EPIPE from logging must
+// never terminate the backend itself.
+process.stdout.on("error", () => undefined);
+process.stderr.on("error", () => undefined);
+
 export function aiLog(event: string, details: Record<string, LogValue> = {}): void {
   if (process.env.NODE_ENV === "production") return;
   console.info(`[groubot.ai] ${event}`, JSON.stringify(details));

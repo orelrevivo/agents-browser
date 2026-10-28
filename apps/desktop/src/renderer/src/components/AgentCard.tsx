@@ -1,27 +1,128 @@
 import type { Agent } from "@groubot/db";
-import { Badge, Button, Card, CardContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@groubot/ui";
-import { Copy, MoreHorizontal, Pencil, Star, Trash2 } from "lucide-react";
+import {
+  Button,
+  Card,
+  CardContent,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@groubot/ui";
+import {
+  Check,
+  Copy,
+  MoreHorizontal,
+  Pencil,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { agentAvatarAssets } from "../generated/agent-assets";
+import { marketplaceAgentAvatarAssets } from "../generated/marketplace-agent-assets";
 
-export function AgentCard({ agent, onDelete, onDuplicate, onEdit, onSetDefault }: { agent: Agent; onDelete: () => void; onDuplicate: () => void; onEdit: () => void; onSetDefault: () => void }) {
+interface AgentCardProps {
+  agent: Agent;
+  onDelete: () => void;
+  onDuplicate: () => void;
+  onEdit: () => void;
+  onSetDefault: () => void;
+}
+
+export function AgentCard({
+  agent,
+  onDelete,
+  onDuplicate,
+  onEdit,
+  onSetDefault,
+}: AgentCardProps) {
   return (
-    <Card className="group transition-colors hover:border-primary/40">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-primary/10 text-primary"><img alt="" className="h-full w-full object-cover" src={resolveAvatar(agent.avatarData)} /></div>
-            <div className="min-w-0"><h3 className="truncate text-sm font-semibold text-foreground">{agent.name}</h3><p className="mt-0.5 truncate text-xs text-muted-foreground">{agent.description || "No description yet"}</p></div>
+    <Card className="overflow-hidden border-0 bg-[#fbf8f4] text-[#171717] shadow-none dark:bg-[#252321] dark:text-[#f7f3ee]">
+      <CardContent className="p-0">
+        <div className="relative overflow-hidden rounded-[1.35rem] border border-black/10 bg-[#f5eee8] shadow-[0_5px_14px_rgba(0,0,0,0.09)] dark:border-white/10 dark:bg-[#302d2a] dark:shadow-[0_5px_14px_rgba(0,0,0,0.2)]">
+          <div className="marketplace-agent-pattern absolute inset-0 opacity-70" />
+          <div className="relative flex h-52 items-end justify-center px-8 pt-5">
+            <img
+              alt={`${agent.name} avatar`}
+              className="h-full w-full object-contain object-bottom drop-shadow-[0_10px_8px_rgba(0,0,0,0.12)]"
+              src={resolveAvatar(agent.avatarData)}
+            />
+            <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-full bg-white/85 px-3 py-1.5 text-sm font-semibold text-[#6f4941] shadow-sm backdrop-blur-sm dark:bg-black/35 dark:text-[#f1c9bc]">
+              {agent.isDefault ? <Star className="size-3.5" /> : null}
+              {agent.isDefault ? "Default" : "Your agent"} · {agent.name}
+            </div>
           </div>
-          <DropdownMenu><DropdownMenuTrigger asChild><Button aria-label={`Actions for ${agent.name}`} className="opacity-70 group-hover:opacity-100" size="icon" variant="ghost"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={onEdit}><Pencil className="size-4" /> Edit settings</DropdownMenuItem><DropdownMenuItem onClick={onDuplicate}><Copy className="size-4" /> Duplicate</DropdownMenuItem><DropdownMenuItem onClick={onDelete}><Trash2 className="size-4" /> Delete</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
         </div>
-        <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3"><div>{agent.isDefault && <Badge><Star className="mr-1 size-3" /> Default</Badge>}</div>{!agent.isDefault && <Button className="h-7 px-2 text-xs" onClick={onSetDefault} variant="ghost">Set default</Button>}</div>
+
+        <div className="space-y-3 px-5 pb-5 pt-4">
+          <p className="text-sm font-medium text-black/60 dark:text-white/60">
+            What to expect from {agent.name}
+          </p>
+          <ul className="space-y-2 text-sm leading-6">
+            <li className="flex items-start gap-2">
+              <Check className="mt-1 size-3.5 shrink-0 text-[#7c5b51] dark:text-[#e7ae9d]" />
+              <span>
+                {agent.description || "A companion configured for your workflow."}
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <Check className="mt-1 size-3.5 shrink-0 text-[#7c5b51] dark:text-[#e7ae9d]" />
+              <span>
+                {agent.goals || "Works with your instructions and preferences."}
+              </span>
+            </li>
+          </ul>
+
+          <div className="flex items-center gap-3 pt-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  aria-label={`More options for ${agent.name}`}
+                  className="rounded-full bg-[#292725] text-white hover:bg-[#3b3835] dark:bg-[#f7f3ee] dark:text-[#292725] dark:hover:bg-white"
+                  size="icon"
+                  title="More options"
+                >
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="bottom" sideOffset={8}>
+                <DropdownMenuItem onClick={onEdit}>
+                  <Pencil className="size-4" />
+                  Edit agent
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onDuplicate}>
+                  <Copy className="size-4" />
+                  Duplicate
+                </DropdownMenuItem>
+                {!agent.isDefault && (
+                  <DropdownMenuItem onClick={onSetDefault}>
+                    <Star className="size-4" />
+                    Set as default
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={onDelete}
+                >
+                  <Trash2 className="size-4" />
+                  Delete agent
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function resolveAvatar(value: string) {
+function resolveAvatar(value: string): string {
   if (value.startsWith("data:image/")) return value;
   const stablePath = value.replace(/^\.\/agents\//, "/agents/");
-  return agentAvatarAssets.find((asset) => asset.path === stablePath)?.src ?? agentAvatarAssets[0]?.src ?? "";
+
+  return (
+    agentAvatarAssets.find((asset) => asset.path === stablePath)?.src ??
+    marketplaceAgentAvatarAssets.find((asset) => asset.path === stablePath)
+      ?.src ??
+    agentAvatarAssets[0]?.src ??
+    ""
+  );
 }

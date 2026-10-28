@@ -5,13 +5,14 @@
   "type": "module",
   "main": "./src/server.ts",
   "dependencies": {
-    "@groubot/db": "workspace:*",
     "@groubot/ai": "workspace:*",
+    "@groubot/db": "workspace:*",
     "dotenv": "^16.4.7",
     "zod": "^4.1.11"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.2"
   },
   "scripts": {

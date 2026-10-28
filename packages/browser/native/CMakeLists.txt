@@ -20,7 +20,7 @@ add_executable(groubot-cef-host
 target_compile_features(groubot-cef-host PRIVATE cxx_std_20)
 target_compile_definitions(groubot-cef-host PRIVATE CEF_USE_SANDBOX=0)
 target_include_directories(groubot-cef-host PRIVATE "${CEF_INCLUDE_PATH}" src)
-target_link_libraries(groubot-cef-host PRIVATE libcef_dll_wrapper ${CEF_LIB_RELEASE} X11 pthread dl)
+target_link_libraries(groubot-cef-host PRIVATE libcef_dll_wrapper ${CEF_LIB_RELEASE} X11 Xext pthread dl)
 
 set_target_properties(groubot-cef-host PROPERTIES
   BUILD_RPATH "${CEF_BINARY_DIR_RELEASE}"
@@ -29,8 +29,10 @@ set_target_properties(groubot-cef-host PROPERTIES
 )
 
 add_custom_command(TARGET groubot-cef-host POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CEF_LIB_RELEASE}" "$<TARGET_FILE_DIR:groubot-cef-host>/libcef.so"
-  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CEF_BINARY_DIR_RELEASE}" "$<TARGET_FILE_DIR:groubot-cef-host>"
+  # Keep libcef.so in the persistent CEF SDK. The executable has an RPATH to
+  # that directory, so copying this 1.4 GB library into every build is wasteful
+  # and can exhaust the user's disk during a normal rebuild.
+  COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:groubot-cef-host>/locales"
 )
 
 foreach(CEF_RESOURCE chrome_100_percent.pak chrome_200_percent.pak resources.pak icudtl.dat)
