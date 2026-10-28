@@ -120,14 +120,14 @@ interface ChatStreamEvent {
   requestId: string;
   conversationId: string;
   type:
-    | "started"
-    | "delta"
-    | "completed"
-    | "cancelled"
-    | "error"
-    | "tool_activity"
-    | "approval_request"
-    | "waiting_for_human";
+  | "started"
+  | "delta"
+  | "completed"
+  | "cancelled"
+  | "error"
+  | "tool_activity"
+  | "approval_request"
+  | "waiting_for_human";
   delta?: string;
   content?: string;
   code?: string;
@@ -174,4 +174,4 @@ declare global {
   }
 }
 
-export {};
+export { };

@@ -6,6 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   base: "./",
   root: resolve(process.cwd(), "src/renderer"),
+  publicDir: resolve(process.cwd(), "public"),
   resolve: {
     alias: { "@": resolve(process.cwd(), "src") },
   },

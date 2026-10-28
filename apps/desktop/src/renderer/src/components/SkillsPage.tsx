@@ -106,18 +106,12 @@ export function SkillsPage() {
         <div className="mx-auto w-full max-w-5xl px-6 py-8 sm:px-10">
           <header className="flex flex-col gap-2 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <div className="mb-3 flex items-center gap-2 text-primary">
-                <Sparkles className="size-4" />
-                <span className="text-xs font-medium uppercase tracking-[0.18em]">
-                  Reusable interactions
-                </span>
-              </div>
               <h1 className="text-3xl font-semibold tracking-tight">Skills</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Create and Manage Reusable Interactions for Your Agents.
               </p>
             </div>
-            <Button onClick={() => setEditorOpen(true)}>
+            <Button onClick={() => setEditorOpen(true)} className="bg-primary/20">
               <Plus className="size-4" /> Create skill
             </Button>
           </header>
@@ -134,7 +128,7 @@ export function SkillsPage() {
               </span>
             </div>
             {loading ? (
-            <div className="grid gap-6 xl:grid-cols-2">
+              <div className="grid gap-6 xl:grid-cols-2">
                 <Skeleton className="h-40" />
                 <Skeleton className="h-40" />
                 <Skeleton className="h-40" />
@@ -146,7 +140,7 @@ export function SkillsPage() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   Create a reusable interaction for your agents.
                 </p>
-                <Button className="mt-5" onClick={() => setEditorOpen(true)}>
+                <Button className="mt-5 bg-primary/20" onClick={() => setEditorOpen(true)}>
                   <Plus className="size-4" /> Create skill
                 </Button>
               </div>

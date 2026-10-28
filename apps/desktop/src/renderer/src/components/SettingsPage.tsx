@@ -3,12 +3,15 @@ import { Button, Separator, Switch } from "@groubot/ui";
 import {
   ArrowLeft,
   Check,
+  Image as ImageIcon,
   Monitor,
   Moon,
   PanelLeft,
   PanelTop,
   Settings2,
   Sun,
+  Trash2,
+  Upload,
 } from "lucide-react";
 
 export type AppearanceTheme = "dark" | "light";
@@ -30,6 +33,9 @@ export function SettingsPage({
   onBack,
 }: SettingsPageProps) {
   const [compactMode, setCompactMode] = useState(false);
+  const [customBackground, setCustomBackground] = useState<string | null>(() =>
+    localStorage.getItem("groubot.customBackground"),
+  );
 
   useEffect(() => {
     setCompactMode(localStorage.getItem("groubot.compactMode") === "true");
@@ -38,6 +44,25 @@ export function SettingsPage({
   function updateCompactMode(enabled: boolean) {
     setCompactMode(enabled);
     localStorage.setItem("groubot.compactMode", String(enabled));
+  }
+
+  function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setCustomBackground(result);
+      localStorage.setItem("groubot.customBackground", result);
+      window.dispatchEvent(new Event("groubot:background-changed"));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeCustomBackground() {
+    setCustomBackground(null);
+    localStorage.removeItem("groubot.customBackground");
+    window.dispatchEvent(new Event("groubot:background-changed"));
   }
 
   return (
@@ -81,6 +106,59 @@ export function SettingsPage({
                 label="Light mode"
                 onClick={() => onThemeChange("light")}
               />
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
+            description="Customize the wallpaper displayed behind the home chat workspace. By default, the wallpaper adapts automatically to dark and light mode."
+            icon={<ImageIcon className="size-4" />}
+            title="Chat Background"
+          >
+            <div className="flex flex-col gap-3 rounded-lg border border-border bg-background/40 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium">Custom Background Image</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {customBackground
+                      ? "Custom background is currently active."
+                      : "Default theme wallpaper is active (changes between dark and light mode)."}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
+                    <span className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors">
+                      <Upload className="size-4" />
+                      {customBackground ? "Change Image" : "Upload Image"}
+                    </span>
+                  </label>
+                  {customBackground && (
+                    <Button
+                      onClick={removeCustomBackground}
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="size-4" />
+                      Reset to Default
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {customBackground && (
+                <div className="relative mt-2 h-32 w-full max-w-sm overflow-hidden rounded-lg border border-border">
+                  <img
+                    src={customBackground}
+                    alt="Custom background preview"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              )}
             </div>
           </SettingsSection>
 

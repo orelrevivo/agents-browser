@@ -39,6 +39,8 @@ import { ChatMessageList } from "./ChatMessageList";
 import { ChatSidebar } from "./ChatSidebar";
 import { AgentEditorDialog } from "./AgentEditorDialog";
 import { HomeAgentStrip } from "./HomeAgentStrip";
+import darkBackground from "../../../../public/Background-dark.png";
+import lightBackground from "../../../../public/Background-light.png";
 
 type ApprovalRequest = {
   approvalId: string;
@@ -81,6 +83,30 @@ export function ChatWorkspace({
   const [error, setError] = useState("");
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const [theme, setTheme] = useState<"dark" | "light">(() =>
+    document.documentElement.classList.contains("light") ? "light" : "dark",
+  );
+  const [customBackground, setCustomBackground] = useState<string | null>(() =>
+    localStorage.getItem("groubot.customBackground"),
+  );
+
+  useEffect(() => {
+    function handleBackgroundChange() {
+      setCustomBackground(localStorage.getItem("groubot.customBackground"));
+    }
+    const observer = new MutationObserver(() => {
+      setTheme(document.documentElement.classList.contains("light") ? "light" : "dark");
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    window.addEventListener("groubot:background-changed", handleBackgroundChange);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("groubot:background-changed", handleBackgroundChange);
+    };
+  }, []);
 
   const selectedAgent = useMemo(
     () =>
@@ -472,6 +498,14 @@ export function ChatWorkspace({
           onToggle={() => setSidebarCollapsed((value) => !value)}
         />
         <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+          {!isConversation && (
+            <div
+              className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-300"
+              style={{
+                backgroundImage: `url(${customBackground || (theme === "light" ? lightBackground : darkBackground)})`,
+              }}
+            />
+          )}
           {isConversation && (
             <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-4">
               <div className="flex min-w-0 items-center gap-2">

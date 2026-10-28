@@ -108,7 +108,9 @@ if (process.argv[2] === "build") {
   }
   const child = spawn(executable, [
     `--url=file://${resolve(root, "dist/renderer/index.html")}`,
-    `--root-cache=${resolve(root, ".groubot/cef-profile")}`,
+    // Keep CEF's global root cache separate from the browser profile cache.
+    // Using one directory for both causes Chromium's profile error dialog.
+    `--root-cache=${resolve(root, ".groubot/cef-root-cache")}`,
     `--profile=${resolve(root, ".groubot/cef-profile")}`,
   `--resources=${resolve(cefRoot, "Resources")}`,
     `--locales=${resolve(cefRoot, "Resources/locales")}`,

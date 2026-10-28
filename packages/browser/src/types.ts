@@ -1,15 +1,15 @@
 export interface BrowserTabState {
   id: string;
   kind:
-    | "home"
-    | "chat"
-    | "agents"
-    | "skills"
-    | "marketplace"
-    | "group"
-    | "preferences"
-    | "downloads"
-    | "web";
+  | "home"
+  | "chat"
+  | "agents"
+  | "skills"
+  | "marketplace"
+  | "group"
+  | "preferences"
+  | "downloads"
+  | "web";
   title: string;
   url: string;
   faviconUrl?: string;

@@ -168,9 +168,6 @@ void CefApplication::HandleCommandOnUi(const std::string& command, const std::st
   } else if (command == "RESIZE") {
     std::stringstream stream(value);
     int x = 0, y = 0, width = 0, height = 0;
-    // The command channel uses tabs as whitespace separators. Reading into a
-    // char here consumed the numeric tokens themselves and produced tiny
-    // browser bounds such as 871x11 after a maximize event.
     stream >> x >> y >> width >> height;
     if (width > 0 && height > 0) {
       width_ = width;
@@ -179,14 +176,30 @@ void CefApplication::HandleCommandOnUi(const std::string& command, const std::st
       if (display) {
         if (shell_browser_) {
           const auto handle = shell_browser_->GetHost()->GetWindowHandle();
-          if (handle) XMoveResizeWindow(display, handle, 0, 0, static_cast<unsigned>(width), static_cast<unsigned>(height));
+          if (handle) {
+            XMoveResizeWindow(display, handle, 0, 0, static_cast<unsigned>(width), static_cast<unsigned>(height));
+            XShapeCombineMask(display, handle, ShapeBounding, 0, 0, None, ShapeSet);
+            XShapeCombineMask(display, handle, ShapeInput, 0, 0, None, ShapeSet);
+            XShapeCombineMask(display, handle, ShapeClip, 0, 0, None, ShapeSet);
+            XClearArea(display, handle, 0, 0, static_cast<unsigned>(width), static_cast<unsigned>(height), True);
+          }
         }
         ApplyBrowserBounds();
         XFlush(display);
+        XSync(display, False);
         XCloseDisplay(display);
       }
-      if (shell_browser_) shell_browser_->GetHost()->WasResized();
-      for (const auto& [tab_id, tab] : external_tabs_) tab->GetHost()->WasResized();
+      if (shell_browser_) {
+        shell_browser_->GetHost()->NotifyMoveOrResizeStarted();
+        shell_browser_->GetHost()->NotifyScreenInfoChanged();
+        shell_browser_->GetHost()->WasResized();
+      }
+      for (const auto& [tab_id, tab] : external_tabs_) {
+        tab->GetHost()->NotifyMoveOrResizeStarted();
+        tab->GetHost()->NotifyScreenInfoChanged();
+        tab->GetHost()->WasResized();
+      }
+      NotifyShell("RESIZE", "shell", std::to_string(width) + "x" + std::to_string(height));
     }
   }
 }
@@ -468,9 +481,32 @@ void CefApplication::ApplyBrowserBounds() {
 
 void CefApplication::EnforceTabBounds() {
   CEF_REQUIRE_UI_THREAD();
-  if (parent_window_ && !external_tabs_.empty()) {
+  if (parent_window_) {
     auto* display = XOpenDisplay(nullptr);
     if (display) {
+      XWindowAttributes parent_attr{};
+      if (XGetWindowAttributes(display, parent_window_, &parent_attr)) {
+        if (parent_attr.width > 0 && parent_attr.height > 0 &&
+            (parent_attr.width != width_ || parent_attr.height != height_)) {
+          width_ = parent_attr.width;
+          height_ = parent_attr.height;
+          if (shell_browser_) {
+            const auto shell_handle = shell_browser_->GetHost()->GetWindowHandle();
+            if (shell_handle) {
+              XMoveResizeWindow(display, shell_handle, 0, 0, static_cast<unsigned>(width_), static_cast<unsigned>(height_));
+              XShapeCombineMask(display, shell_handle, ShapeBounding, 0, 0, None, ShapeSet);
+              XShapeCombineMask(display, shell_handle, ShapeInput, 0, 0, None, ShapeSet);
+              XShapeCombineMask(display, shell_handle, ShapeClip, 0, 0, None, ShapeSet);
+              XClearArea(display, shell_handle, 0, 0, static_cast<unsigned>(width_), static_cast<unsigned>(height_), True);
+            }
+            shell_browser_->GetHost()->NotifyMoveOrResizeStarted();
+            shell_browser_->GetHost()->NotifyScreenInfoChanged();
+            shell_browser_->GetHost()->WasResized();
+            NotifyShell("RESIZE", "shell", std::to_string(width_) + "x" + std::to_string(height_));
+          }
+        }
+      }
+
       int x = 0;
       int y = 0;
       int width = 0;
@@ -497,6 +533,9 @@ void CefApplication::EnforceTabBounds() {
             (attributes.x != x || attributes.y != y ||
              attributes.width != width || attributes.height != height)) {
           XMoveResizeWindow(display, handle, x, y, static_cast<unsigned>(width), static_cast<unsigned>(height));
+          tab->GetHost()->NotifyMoveOrResizeStarted();
+          tab->GetHost()->NotifyScreenInfoChanged();
+          tab->GetHost()->WasResized();
         }
       }
       XFlush(display);
@@ -531,15 +570,9 @@ void CefApplication::SetOverlayVisibility(const std::string& value) {
       if (page_handle) XUnmapWindow(display, page_handle);
     }
 
-    XRectangle full_window = {
-        0,
-        0,
-        static_cast<unsigned short>(std::min(width_, 65535)),
-        static_cast<unsigned short>(std::min(height_, 65535)),
-    };
-    XShapeCombineRectangles(display, shell_handle, ShapeBounding, 0, 0, &full_window, 1, ShapeSet, YXBanded);
-    XShapeCombineRectangles(display, shell_handle, ShapeInput, 0, 0, &full_window, 1, ShapeSet, YXBanded);
-    XShapeCombineRectangles(display, shell_handle, ShapeClip, 0, 0, &full_window, 1, ShapeSet, YXBanded);
+    XShapeCombineMask(display, shell_handle, ShapeBounding, 0, 0, None, ShapeSet);
+    XShapeCombineMask(display, shell_handle, ShapeInput, 0, 0, None, ShapeSet);
+    XShapeCombineMask(display, shell_handle, ShapeClip, 0, 0, None, ShapeSet);
     XMapWindow(display, shell_handle);
     XRaiseWindow(display, shell_handle);
     XFlush(display);
@@ -551,15 +584,9 @@ void CefApplication::SetOverlayVisibility(const std::string& value) {
   if (!open) {
     // Restore the full React shell first, then restore the active website
     // surface above the content area. No browser tab is closed or recreated.
-    XRectangle full_window = {
-        0,
-        0,
-        static_cast<unsigned short>(std::min(width_, 65535)),
-        static_cast<unsigned short>(std::min(height_, 65535)),
-    };
-    XShapeCombineRectangles(display, shell_handle, ShapeBounding, 0, 0, &full_window, 1, ShapeSet, YXBanded);
-    XShapeCombineRectangles(display, shell_handle, ShapeInput, 0, 0, &full_window, 1, ShapeSet, YXBanded);
-    XShapeCombineRectangles(display, shell_handle, ShapeClip, 0, 0, &full_window, 1, ShapeSet, YXBanded);
+    XShapeCombineMask(display, shell_handle, ShapeBounding, 0, 0, None, ShapeSet);
+    XShapeCombineMask(display, shell_handle, ShapeInput, 0, 0, None, ShapeSet);
+    XShapeCombineMask(display, shell_handle, ShapeClip, 0, 0, None, ShapeSet);
     XMapWindow(display, shell_handle);
     XFlush(display);
     XCloseDisplay(display);

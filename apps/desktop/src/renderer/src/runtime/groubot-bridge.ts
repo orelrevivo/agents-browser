@@ -43,13 +43,13 @@ interface ChatStreamEvent {
   requestId: string;
   conversationId: string;
   type:
-    | "started"
-    | "delta"
-    | "completed"
-    | "cancelled"
-    | "error"
-    | "tool_activity"
-    | "approval_request";
+  | "started"
+  | "delta"
+  | "completed"
+  | "cancelled"
+  | "error"
+  | "tool_activity"
+  | "approval_request";
   delta?: string;
   content?: string;
   code?: string;
@@ -116,6 +116,10 @@ export function installGroubotBridge(): void {
     window as Window & { groubotNativeEvent?: (event: NativeEvent) => void }
   ).groubotNativeEvent = (event) => {
     if (event.type === "READY" || event.type === "CLOSED") return;
+    if (event.type === "RESIZE") {
+      window.dispatchEvent(new Event("resize"));
+      return;
+    }
     if (event.type === "SHORTCUT" && event.value === "CTRL_T") {
       void browser.createTab();
       return;
@@ -280,45 +284,45 @@ export function installGroubotBridge(): void {
               ? "chat"
               : input === "groubot://agents"
                 ? "agents"
-                  : input === "groubot://skills"
-                    ? "skills"
-                    : isGroupRoute(input)
-                      ? "group"
+                : input === "groubot://skills"
+                  ? "skills"
+                  : isGroupRoute(input)
+                    ? "group"
                     : input === "groubot://downloads"
                       ? "downloads"
-                    : isMarketplaceRoute(input)
-                    ? "marketplace"
-                  : input === "groubot://preferences" ||
-                      input === "about:preferences"
-                    ? "preferences"
-                    : "home";
+                      : isMarketplaceRoute(input)
+                        ? "marketplace"
+                        : input === "groubot://preferences" ||
+                          input === "about:preferences"
+                          ? "preferences"
+                          : "home";
         state = {
           ...state,
           activeTabId: activeId,
           tabs: state.tabs.map((tab) =>
             tab.id === activeId
               ? {
-                  ...tab,
-                  kind,
-                  url: input,
-                  title:
-                    kind === "agents"
-                      ? "Agents"
-                      : kind === "skills"
-                          ? "Skills"
-                        : kind === "group"
-                          ? "Group"
+                ...tab,
+                kind,
+                url: input,
+                title:
+                  kind === "agents"
+                    ? "Agents"
+                    : kind === "skills"
+                      ? "Skills"
+                      : kind === "group"
+                        ? "Group"
                         : kind === "marketplace"
                           ? "Marketplace Agents"
-                        : kind === "downloads"
-                          ? "Downloads"
-                        : kind === "preferences"
-                          ? "Settings"
-                          : kind === "chat"
-                            ? "Chat"
-                            : "Groubot",
-                  active: true,
-                }
+                          : kind === "downloads"
+                            ? "Downloads"
+                            : kind === "preferences"
+                              ? "Settings"
+                              : kind === "chat"
+                                ? "Chat"
+                                : "Groubot",
+                active: true,
+              }
               : { ...tab, active: false },
           ),
         } as BrowserState;
@@ -337,14 +341,14 @@ export function installGroubotBridge(): void {
         tabs: state.tabs.map((tab) =>
           tab.id === currentId
             ? {
-                ...tab,
-                id: activeId,
-                kind: "web",
-                url,
-                title: url,
-                isLoading: true,
-                active: true,
-              }
+              ...tab,
+              id: activeId,
+              kind: "web",
+              url,
+              title: url,
+              isLoading: true,
+              active: true,
+            }
             : { ...tab, active: false },
         ),
       } as BrowserState;

@@ -82,6 +82,10 @@ int main(int argc, char* argv[]) {
   const auto locales = Argument(argc, argv, "locales");
   if (!root_cache.empty()) {
     std::filesystem::create_directories(root_cache);
+    std::error_code ec;
+    std::filesystem::remove(std::filesystem::path(root_cache) / "SingletonLock", ec);
+    std::filesystem::remove(std::filesystem::path(root_cache) / "SingletonCookie", ec);
+    std::filesystem::remove(std::filesystem::path(root_cache) / "SingletonSocket", ec);
     CefString(&settings.root_cache_path) = root_cache;
   }
   if (!resources.empty()) CefString(&settings.resources_dir_path) = resources;

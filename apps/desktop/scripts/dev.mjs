@@ -248,9 +248,31 @@ function terminateHostProcessGroups(signal) {
 terminateHostProcessGroups("SIGTERM");
 await new Promise((resolveWait) => setTimeout(resolveWait, 400));
 terminateHostProcessGroups("SIGKILL");
+
+function cleanStaleProfileArtifacts(dir) {
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        cleanStaleProfileArtifacts(full);
+      } else if (
+        entry.name === "LOCK" ||
+        entry.name.endsWith(".lock") ||
+        entry.name.startsWith("Singleton") ||
+        (entry.name.endsWith("-journal") && statSync(full).size === 0)
+      ) {
+        try { unlinkSync(full); } catch {}
+      }
+    }
+  } catch {}
+}
+cleanStaleProfileArtifacts(resolve(root, ".groubot/cef-profile"));
 const child = spawn(executable, [
   `--url=http://127.0.0.1:${port}/`,
-  `--root-cache=${resolve(root, ".groubot/cef-profile")}`,
+  // CEF requires root_cache_path to be separate from each request context's
+  // cache_path. Sharing the profile directory makes Chromium show its
+  // "Profile error occurred" dialog during startup.
+  `--root-cache=${resolve(root, ".groubot/cef-root-cache")}`,
   `--profile=${resolve(root, ".groubot/cef-profile")}`,
   `--resources=${resolve(cefRoot, "Resources")}`,
   `--locales=${resolve(cefRoot, "Resources/locales")}`,
