@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, readdirSync, readlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readdirSync, readlinkSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse as parseDotenv } from "dotenv";
 import { createServer } from "vite";
@@ -192,7 +192,14 @@ if (!cefRoot) {
 }
 const buildDir = process.env.GROUBOT_CEF_BUILD ?? resolve(workspaceRoot, ".groubot", "cef-host-build");
 const executable = resolve(buildDir, "Release/groubot-cef-host");
-if (!existsSync(executable)) {
+function nativeSourcesAreNewer() {
+  try {
+    const built = statSync(executable).mtimeMs;
+    const sourceDir = resolve(workspaceRoot, "packages/browser/native/src");
+    return readdirSync(sourceDir).some((name) => statSync(resolve(sourceDir, name)).mtimeMs > built);
+  } catch { return false; }
+}
+if (!existsSync(executable) || nativeSourcesAreNewer()) {
   console.log("CEF host is not built; building it in the persistent project directory…");
   try {
     execFileSync(process.execPath, [resolve(root, "scripts/native-cef.mjs"), "build"], {

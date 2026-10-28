@@ -38,6 +38,7 @@ class CefApplication final : public CefApp,
   void ExecutePageScript(const std::string& tab_id, const std::string& request_id, const std::string& script);
   void LaunchIndependentWindow(const std::string& shell_url);
   void ApplyBrowserBounds();
+  void EnforceTabBounds();
   void GetContentBounds(int* x, int* y, int* width, int* height) const;
   void SetOverlayVisibility(const std::string& value);
   CommandChannel* channel_;
@@ -45,6 +46,7 @@ class CefApplication final : public CefApp,
   int width_ = 1440;
   int height_ = 900;
   uint64_t popup_counter_ = 0;
+  bool bounds_guard_started_ = false;
   CefRefPtr<CefRequestContext> request_context_;
   CefRefPtr<GroubotRenderProcessHandler> render_handler_;
   CefRefPtr<CefBrowser> shell_browser_;

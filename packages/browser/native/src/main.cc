@@ -1,4 +1,5 @@
 #include "cef_application.h"
+#include "cef_render_process_handler.h"
 #include "command_channel.h"
 #include "include/cef_app.h"
 
@@ -23,6 +24,18 @@ std::string Argument(int argc, char* argv[], std::string_view name) {
   return {};
 }
 
+// Minimal app for CEF subprocesses. It only installs the renderer-side
+// bridge (window.groubotNative / page evaluation) and avoids the browser-only
+// behaviour of CefApplication that breaks child bootstrap on CEF 156.
+class RendererApp final : public CefApp {
+ public:
+  CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override { return handler_; }
+
+ private:
+  CefRefPtr<GroubotRenderProcessHandler> handler_ = new GroubotRenderProcessHandler();
+  IMPLEMENT_REFCOUNTING(RendererApp);
+};
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -39,7 +52,8 @@ int main(int argc, char* argv[]) {
   // object is installed for the browser process after CefExecuteProcess;
   // passing it here causes CEF 156's child bootstrap to fail before ICU is
   // initialized on some Linux installations.
-  const auto exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
+  CefRefPtr<RendererApp> subprocess_app = new RendererApp();
+  const auto exit_code = CefExecuteProcess(main_args, subprocess_app, nullptr);
   std::cerr << "[groubot-cef] execute-process-returned " << exit_code << std::endl;
   if (exit_code >= 0) return exit_code;
 

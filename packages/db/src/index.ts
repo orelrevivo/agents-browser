@@ -1,4 +1,6 @@
 import Database from "better-sqlite3";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { asc, desc, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -86,11 +88,21 @@ export type { Skill, SkillInput } from "./skills.js";
 export { agentGroupInputSchema, agentGroupUpdateSchema, groupIdSchema } from "./groups.js";
 export type { AgentGroup, AgentGroupInput, AgentGroupUpdate } from "./groups.js";
 
+function openDatabase(databasePath: string): Database.Database {
+  if (databasePath !== ":memory:") {
+    const dir = dirname(databasePath);
+    if (dir && dir !== ".") {
+      mkdirSync(dir, { recursive: true });
+    }
+  }
+  return new Database(databasePath);
+}
+
 export function createAgentGroupRepository(
   databasePath: string,
   migrationsFolder: string,
 ) {
-  const sqlite = new Database(databasePath);
+  const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   const db = drizzle(sqlite);
   migrate(db, { migrationsFolder });
@@ -185,7 +197,7 @@ export function createAgentRepository(
   databasePath: string,
   migrationsFolder: string,
 ) {
-  const sqlite = new Database(databasePath);
+  const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
   const db = drizzle(sqlite);
@@ -299,7 +311,7 @@ export function createChatRepository(
   databasePath: string,
   migrationsFolder: string,
 ) {
-  const sqlite = new Database(databasePath);
+  const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
   const db = drizzle(sqlite);
@@ -495,7 +507,7 @@ export function createMemoryRepository(
   databasePath: string,
   migrationsFolder: string,
 ) {
-  const sqlite = new Database(databasePath);
+  const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
   const db = drizzle(sqlite);
@@ -566,7 +578,7 @@ export function createBrowserTaskRepository(
   databasePath: string,
   migrationsFolder: string,
 ) {
-  const sqlite = new Database(databasePath);
+  const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
   const db = drizzle(sqlite);
@@ -656,7 +668,7 @@ export function createSkillRepository(
   databasePath: string,
   migrationsFolder: string,
 ) {
-  const sqlite = new Database(databasePath);
+  const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
   const db = drizzle(sqlite);

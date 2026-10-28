@@ -376,10 +376,11 @@ void CefApplication::CreateExternalTab(const std::string& tab_id, const std::str
   int content_height = 0;
   GetContentBounds(&content_x, &content_y, &content_width, &content_height);
   CefWindowInfo window_info;
-  // Use the shell's actual X11 child as the parent. Using the outer host
-  // window here allows some window managers to reparent the browser as a
-  // decorated top-level window.
-  window_info.SetAsChild(shell_browser_->GetHost()->GetWindowHandle(), CefRect(content_x, content_y, content_width, content_height));
+  // Parent website browsers to the plain X11 host window, exactly like the
+  // shell. Parenting to the shell's CEF-owned window lets Chromium embed the
+  // page inside the shell surface at (0,0), covering the tab bar and toolbar.
+  window_info.SetAsChild(parent_window_, CefRect(content_x, content_y, content_width, content_height));
+  std::cerr << "[groubot-cef] create-external-tab id=" << tab_id << " bounds=" << content_x << "," << content_y << " " << content_width << "x" << content_height << std::endl;
   CefBrowserSettings browser_settings;
   auto* client = new CefBrowserClient(channel_, tab_id, [this](CefRefPtr<CefBrowser> browser, const std::string& event, const std::string& value) {
     HandleBrowserEvent(browser, event, value);
@@ -388,6 +389,10 @@ void CefApplication::CreateExternalTab(const std::string& tab_id, const std::str
   });
   external_clients_[tab_id] = client;
   CefBrowserHost::CreateBrowser(window_info, client, url, browser_settings, nullptr, request_context_);
+  if (!bounds_guard_started_) {
+    bounds_guard_started_ = true;
+    CefPostDelayedTask(TID_UI, base::BindOnce(&CefApplication::EnforceTabBounds, this), 150);
+  }
 }
 
 void CefApplication::ConfigurePopup(CefRefPtr<CefBrowser> opener,
@@ -414,7 +419,11 @@ void CefApplication::ConfigurePopup(CefRefPtr<CefBrowser> opener,
 void CefApplication::AttachBrowserWindow(CefRefPtr<CefBrowser> browser, int x, int y, int width, int height) {
   if (!browser || !parent_window_) return;
   const auto handle = browser->GetHost()->GetWindowHandle();
-  if (!handle) return;
+  if (!handle) {
+    std::cerr << "[groubot-cef] attach-skipped no-window-handle" << std::endl;
+    return;
+  }
+  std::cerr << "[groubot-cef] attach handle=" << handle << " parent=" << parent_window_ << " bounds=" << x << "," << y << " " << width << "x" << height << std::endl;
   auto* display = XOpenDisplay(nullptr);
   if (!display) return;
   XSetWindowAttributes attributes{};
@@ -455,6 +464,46 @@ void CefApplication::ApplyBrowserBounds() {
     AttachBrowserWindow(browser, x, y, width, height);
     browser->GetHost()->WasResized();
   }
+}
+
+void CefApplication::EnforceTabBounds() {
+  CEF_REQUIRE_UI_THREAD();
+  if (parent_window_ && !external_tabs_.empty()) {
+    auto* display = XOpenDisplay(nullptr);
+    if (display) {
+      int x = 0;
+      int y = 0;
+      int width = 0;
+      int height = 0;
+      GetContentBounds(&x, &y, &width, &height);
+      for (const auto& [tab_id, tab] : external_tabs_) {
+        if (tab_id.rfind("__popup_", 0) == 0 || !tab) continue;
+        const auto handle = tab->GetHost()->GetWindowHandle();
+        if (!handle) continue;
+
+        Window root = 0;
+        Window parent = 0;
+        Window* children = nullptr;
+        unsigned int child_count = 0;
+        if (XQueryTree(display, handle, &root, &parent, &children, &child_count)) {
+          if (children) XFree(children);
+          if (parent != parent_window_) {
+            XReparentWindow(display, handle, parent_window_, x, y);
+          }
+        }
+
+        XWindowAttributes attributes{};
+        if (XGetWindowAttributes(display, handle, &attributes) &&
+            (attributes.x != x || attributes.y != y ||
+             attributes.width != width || attributes.height != height)) {
+          XMoveResizeWindow(display, handle, x, y, static_cast<unsigned>(width), static_cast<unsigned>(height));
+        }
+      }
+      XFlush(display);
+      XCloseDisplay(display);
+    }
+  }
+  CefPostDelayedTask(TID_UI, base::BindOnce(&CefApplication::EnforceTabBounds, this), 150);
 }
 
 void CefApplication::SetOverlayVisibility(const std::string& value) {
