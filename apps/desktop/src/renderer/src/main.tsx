@@ -22,6 +22,7 @@ import type { BrowserDownloadState } from "@groubot/browser/types";
 import type { Agent, AgentGroupInput } from "@groubot/db";
 import { GroupEditorSheet } from "./marketplace/GroupEditorSheet";
 import { GroupPage } from "./components/GroupPage";
+import { AutomationTaskSheet } from "./components/AutomationTaskSheet";
 import type { SearchHistoryEntry } from "./components/SearchHistoryPanel";
 
 installGroubotBridge();
@@ -45,6 +46,8 @@ function App() {
   });
   const [groupEditorOpen, setGroupEditorOpen] = useState(false);
   const [groupAgents, setGroupAgents] = useState<Agent[]>([]);
+  const [automationOpen, setAutomationOpen] = useState(false);
+  const [automationAgents, setAutomationAgents] = useState<Agent[]>([]);
   const [theme, setTheme] = useState<AppearanceTheme>(() => {
     return localStorage.getItem("groubot.theme") === "light" ? "light" : "dark";
   });
@@ -82,16 +85,27 @@ function App() {
     function handleNewGroup() {
       setGroupEditorOpen(true);
     }
+    function handleAutomation() {
+      setAutomationOpen(true);
+    }
 
     window.addEventListener("groubot:new-group", handleNewGroup);
-    return () =>
+    window.addEventListener("groubot:automation", handleAutomation);
+    return () => {
       window.removeEventListener("groubot:new-group", handleNewGroup);
+      window.removeEventListener("groubot:automation", handleAutomation);
+    };
   }, []);
 
   useEffect(() => {
     if (!groupEditorOpen) return;
     void window.groubot.agents.list().then(setGroupAgents);
   }, [groupEditorOpen]);
+
+  useEffect(() => {
+    if (!automationOpen) return;
+    void window.groubot.agents.list().then(setAutomationAgents);
+  }, [automationOpen]);
 
   useEffect(() => {
     void window.groubot.browser.getDownloads().then(setDownloads);
@@ -369,6 +383,11 @@ function App() {
         onCreate={createGroup}
         onOpenChange={setGroupEditorOpen}
         open={groupEditorOpen}
+      />
+      <AutomationTaskSheet
+        agents={automationAgents}
+        onOpenChange={setAutomationOpen}
+        open={automationOpen}
       />
     </main>
   );

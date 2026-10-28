@@ -76,8 +76,8 @@ async function backendAlreadyRunning() {
     const response = await fetch(`http://127.0.0.1:${backendPort}/health`, { signal: AbortSignal.timeout(500) });
     if (!response.ok) return false;
     const body = await response.json();
-    if (body?.ok !== true || body.apiVersion !== 4 || body.groupFanout !== true) {
-      console.log("Existing Groubot backend is outdated; restarting it for group execution.");
+    if (body?.ok !== true || body.apiVersion !== 9 || body.groupFanout !== true) {
+      console.log("Existing Groubot backend is outdated; restarting it for automation task support.");
       stopStaleBackend();
       await new Promise((resolveWait) => setTimeout(resolveWait, 500));
       return false;
@@ -239,9 +239,17 @@ function processGroupId(pid) {
 }
 
 function terminateHostProcessGroups(signal) {
-  const groups = new Set(findHostPids().map(processGroupId).filter((group) => group > 0));
+  const hostPids = findHostPids();
+  const groups = new Set(hostPids.map(processGroupId).filter((group) => group > 0));
   for (const group of groups) {
     try { process.kill(-group, signal); } catch {}
+  }
+  // Hosts launched by an older desktop process can be re-parented into a
+  // different session, so their process group is no longer reachable from
+  // this launcher. Kill the executable itself as a safe fallback; the host
+  // executable is the exact one we are about to launch.
+  for (const pid of hostPids) {
+    try { process.kill(pid, signal); } catch {}
   }
 }
 
@@ -266,14 +274,14 @@ function cleanStaleProfileArtifacts(dir) {
     }
   } catch {}
 }
-cleanStaleProfileArtifacts(resolve(root, ".groubot/cef-profile"));
+const cefRootCache = resolve(root, ".groubot/cef-root-cache");
+const cefProfile = resolve(cefRootCache, "profile");
+cleanStaleProfileArtifacts(cefProfile);
 const child = spawn(executable, [
   `--url=http://127.0.0.1:${port}/`,
-  // CEF requires root_cache_path to be separate from each request context's
-  // cache_path. Sharing the profile directory makes Chromium show its
-  // "Profile error occurred" dialog during startup.
-  `--root-cache=${resolve(root, ".groubot/cef-root-cache")}`,
-  `--profile=${resolve(root, ".groubot/cef-profile")}`,
+  // CEF requires each request context cache_path to be inside root_cache_path.
+  `--root-cache=${cefRootCache}`,
+  `--profile=${cefProfile}`,
   `--resources=${resolve(cefRoot, "Resources")}`,
   `--locales=${resolve(cefRoot, "Resources/locales")}`,
 ], { cwd: resolve(cefRoot, "Release"), stdio: "inherit", env: process.env, detached: process.platform !== "win32" });

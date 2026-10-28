@@ -1,5 +1,61 @@
 import { tool } from "@openai/agents";
 
+export interface AgentQuestion {
+  id: string;
+  title: string;
+  prompt: string;
+  questions: Array<{
+    id: string;
+    prompt: string;
+    options: Array<{ id: string; label: string }>;
+  }>;
+}
+
+export class UserQuestionRequested extends Error {
+  constructor(readonly question: AgentQuestion) {
+    super("The agent requested user input.");
+    this.name = "UserQuestionRequested";
+  }
+}
+
+const questionParameters = {
+  type: "object",
+  properties: {
+    title: { type: "string", description: "A short title for the question card." },
+    prompt: { type: "string", description: "A concise explanation of what the user needs to decide." },
+    questions: {
+      type: "array",
+      minItems: 1,
+      description: "One or more multiple-choice questions. Ask all related questions together.",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "A stable short identifier for this question." },
+          prompt: { type: "string", description: "The question shown to the user." },
+          options: {
+            type: "array",
+            minItems: 2,
+            description: "The choices shown to the user.",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                label: { type: "string" },
+              },
+              required: ["id", "label"] as string[],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["id", "prompt", "options"] as string[],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["title", "prompt", "questions"] as string[],
+  additionalProperties: false,
+} as const;
+
 const tableParameters = {
   type: "object",
   properties: {
@@ -70,6 +126,29 @@ const compareParameters = {
 
 export function createWorkTools() {
   return [
+    tool({
+      name: "ask_user_questions",
+      description:
+        "Ask the user one or more questions using the inline multiple-choice question card. MUST use this tool whenever you need the user to choose, clarify, confirm, or provide missing information. Never ask those questions as plain text. After calling this tool, stop and wait for the user's answer.",
+      parameters: questionParameters,
+      async execute(input: unknown) {
+        const value = input as AgentQuestion;
+        const question: AgentQuestion = {
+          id: `question-${Date.now()}`,
+          title: String(value.title).trim(),
+          prompt: String(value.prompt).trim(),
+          questions: value.questions.map((item, questionIndex) => ({
+            id: String(item.id || `question-${questionIndex + 1}`),
+            prompt: String(item.prompt).trim(),
+            options: item.options.map((option, optionIndex) => ({
+              id: String(option.id || `option-${optionIndex + 1}`),
+              label: String(option.label).trim(),
+            })),
+          })),
+        };
+        throw new UserQuestionRequested(question);
+      },
+    }),
     tool({
       name: "create_table",
       description:

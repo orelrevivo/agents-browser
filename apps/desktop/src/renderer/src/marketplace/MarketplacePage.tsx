@@ -100,6 +100,10 @@ export function MarketplacePage() {
           await window.groubot.chats.setPinned({ id, pinned });
           await refresh();
         }}
+        onAgentPin={async (id, pinned) => {
+          await window.groubot.agents.setPinned(id, pinned);
+          await refresh();
+        }}
         onRename={async (id, title) => {
           await window.groubot.chats.rename({ id, title });
           await refresh();

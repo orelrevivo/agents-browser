@@ -106,13 +106,14 @@ if (process.argv[2] === "build") {
     if (backendOwned && backend) { try { backend.kill("SIGTERM"); } catch {} }
     throw error;
   }
+  const cefRootCache = resolve(root, ".groubot/cef-root-cache");
+  const cefProfile = resolve(cefRootCache, "profile");
   const child = spawn(executable, [
     `--url=file://${resolve(root, "dist/renderer/index.html")}`,
-    // Keep CEF's global root cache separate from the browser profile cache.
-    // Using one directory for both causes Chromium's profile error dialog.
-    `--root-cache=${resolve(root, ".groubot/cef-root-cache")}`,
-    `--profile=${resolve(root, ".groubot/cef-profile")}`,
-  `--resources=${resolve(cefRoot, "Resources")}`,
+    // CEF requires each request context cache_path to be inside root_cache_path.
+    `--root-cache=${cefRootCache}`,
+    `--profile=${cefProfile}`,
+    `--resources=${resolve(cefRoot, "Resources")}`,
     `--locales=${resolve(cefRoot, "Resources/locales")}`,
   ], { cwd: resolve(cefRoot, "Release"), stdio: "inherit", env: process.env });
   const shutdown = (code = 0) => {

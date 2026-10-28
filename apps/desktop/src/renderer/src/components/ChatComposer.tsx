@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Skill } from "@groubot/db";
+import type { ChatMessage, Skill } from "@groubot/db";
 import type { BrowserTabState } from "@groubot/browser/types";
 import {
   Button,
@@ -12,8 +12,10 @@ import {
   ArrowUp,
   FolderOpen,
   Globe2,
+  Reply,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react";
 import { SkillToken, TabToken } from "./SkillToken";
 
@@ -28,6 +30,8 @@ export function ChatComposer({
   permissionMode = "ask",
   compact = false,
   busy = false,
+  replyingTo,
+  onClearReply,
 }: {
   canSend: boolean;
   selectedAgentName?: string;
@@ -39,6 +43,8 @@ export function ChatComposer({
   permissionMode?: "ask" | "full";
   compact?: boolean;
   busy?: boolean;
+  replyingTo?: ChatMessage;
+  onClearReply?: () => void;
 }) {
   const composerWidth = compact ? "max-w-2xl" : "max-w-3xl";
   const [value, setValue] = useState("");
@@ -95,7 +101,7 @@ export function ChatComposer({
       className={
         compact
           ? "w-full"
-          : "w-full bg-background/95 p-4 backdrop-blur"
+          : "w-full p-4 backdrop-blur"
       }
     >
       <div
@@ -144,6 +150,23 @@ export function ChatComposer({
                 ×
               </button>
             </span>
+          </div>
+        )}
+        {replyingTo && (
+          <div className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs">
+            <Reply className="mt-0.5 size-3.5 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-primary">Replying to {replyingTo.role === "assistant" ? "the assistant" : "your message"}</p>
+              <p className="mt-0.5 truncate text-muted-foreground">{replyingTo.content}</p>
+            </div>
+            <button
+              aria-label="Cancel reply"
+              className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={onClearReply}
+              type="button"
+            >
+              <X className="size-3.5" />
+            </button>
           </div>
         )}
         <Textarea

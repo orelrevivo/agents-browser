@@ -23,6 +23,7 @@ export type AgentInput = z.infer<typeof agentInputSchema>;
 export interface Agent extends AgentInput {
   id: string;
   isDefault: boolean;
+  isPinned: boolean;
   createdAt: number;
   updatedAt: number;
 }

@@ -27,6 +27,7 @@ interface PendingApproval {
 
 export class BrowserRequestBridge {
   private readonly pending = new Map<string, PendingRequest>();
+  private readonly claims = new Map<string, number>();
   private readonly approvals = new Map<string, PendingApproval>();
   private latestState: unknown[] = [];
 
@@ -57,11 +58,23 @@ export class BrowserRequestBridge {
     operation: BrowserRequestOperation;
     payload: unknown;
   }> {
-    return [...this.pending.entries()].map(([requestId, value]) => ({
-      requestId,
-      operation: value.operation,
-      payload: value.payload,
-    }));
+    const now = Date.now();
+    for (const [requestId, expiresAt] of this.claims) {
+      if (!this.pending.has(requestId) || expiresAt <= now) {
+        this.claims.delete(requestId);
+      }
+    }
+
+    const requests = [];
+    for (const [requestId, value] of this.pending) {
+      if (this.claims.has(requestId)) continue;
+      // A request is owned by one renderer bridge for the lifetime of the
+      // normal request timeout. This prevents two CEF shells (or a polling
+      // loop racing itself) from opening/clicking the same browser tab.
+      this.claims.set(requestId, now + 30_000);
+      requests.push({ requestId, operation: value.operation, payload: value.payload });
+    }
+    return requests;
   }
 
   complete(
@@ -74,6 +87,7 @@ export class BrowserRequestBridge {
     if (!request) return false;
     clearTimeout(request.timer);
     this.pending.delete(requestId);
+    this.claims.delete(requestId);
     if (ok) request.resolve(result);
     else request.reject(new Error(error || "Browser operation failed."));
     return true;
@@ -119,6 +133,7 @@ export class BrowserRequestBridge {
       approval.resolve(false);
     }
     this.approvals.clear();
+    this.claims.clear();
   }
 }
 

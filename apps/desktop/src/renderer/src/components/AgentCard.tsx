@@ -16,8 +16,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { agentAvatarAssets } from "../generated/agent-assets";
-import { marketplaceAgentAvatarAssets } from "../generated/marketplace-agent-assets";
+import { AgentAvatar } from "./AgentAvatar";
 
 interface AgentCardProps {
   agent: Agent;
@@ -40,11 +39,7 @@ export function AgentCard({
         <div className="relative overflow-hidden rounded-[1.35rem] border border-black/10 bg-[#f5eee8] shadow-[0_5px_14px_rgba(0,0,0,0.09)] dark:border-white/10 dark:bg-[#302d2a] dark:shadow-[0_5px_14px_rgba(0,0,0,0.2)]">
           <div className="marketplace-agent-pattern absolute inset-0 opacity-70" />
           <div className="relative flex h-52 items-end justify-center px-8 pt-5">
-            <img
-              alt={`${agent.name} avatar`}
-              className="h-full w-full object-contain object-bottom drop-shadow-[0_10px_8px_rgba(0,0,0,0.12)]"
-              src={resolveAvatar(agent.avatarData)}
-            />
+            <AgentAvatar agent={agent} size="xl" />
             <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-full bg-white/85 px-3 py-1.5 text-sm font-semibold text-[#6f4941] shadow-sm backdrop-blur-sm dark:bg-black/35 dark:text-[#f1c9bc]">
               {agent.isDefault ? <Star className="size-3.5" /> : null}
               {agent.isDefault ? "Default" : "Your agent"} · {agent.name}
@@ -111,18 +106,5 @@ export function AgentCard({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function resolveAvatar(value: string): string {
-  if (value.startsWith("data:image/")) return value;
-  const stablePath = value.replace(/^\.\/agents\//, "/agents/");
-
-  return (
-    agentAvatarAssets.find((asset) => asset.path === stablePath)?.src ??
-    marketplaceAgentAvatarAssets.find((asset) => asset.path === stablePath)
-      ?.src ??
-    agentAvatarAssets[0]?.src ??
-    ""
   );
 }

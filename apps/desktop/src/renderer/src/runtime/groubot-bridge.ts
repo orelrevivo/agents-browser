@@ -3,8 +3,12 @@ import type {
   AgentGroupInput,
   AgentGroupUpdate,
   AgentInput,
+  AutomationInput,
+  AutomationUpdate,
   BrowserTask,
   ChatMessage,
+  ChatMessageMetadata,
+  ChatQuestion,
   Conversation,
   ConversationWithMessages,
   Memory,
@@ -49,7 +53,8 @@ interface ChatStreamEvent {
   | "cancelled"
   | "error"
   | "tool_activity"
-  | "approval_request";
+  | "approval_request"
+  | "question";
   delta?: string;
   content?: string;
   code?: string;
@@ -59,6 +64,7 @@ interface ChatStreamEvent {
   approvalId?: string;
   description?: string;
   input?: Record<string, unknown>;
+  question?: ChatQuestion;
 }
 
 function normalizeExternalAddress(input: string): string {
@@ -98,13 +104,52 @@ export function installGroubotBridge(): void {
     }) => void
   >();
   const cancelledRequests = new Set<string>();
+  const polledRequests = new Set<string>();
+  // The backend keeps an unresolved request in its pending queue until the
+  // renderer completes it. Polling faster than a native CEF operation can
+  // finish must not execute that same request more than once.
+  const browserRequestsInFlight = new Set<string>();
   const pageResults = new Map<
     string,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
+  const nativeReadyTabs = new Set<string>();
+  const nativeReadyWaiters = new Map<string, Set<() => void>>();
+  function normalizeBrowserState(next: BrowserState): BrowserState {
+    const tabs = next.tabs.length > 0 ? next.tabs : [homeTab];
+    const activeId = tabs.some((tab) => tab.id === next.activeTabId)
+      ? next.activeTabId!
+      : tabs.find((tab) => tab.active)?.id ?? tabs[0]!.id;
+    return {
+      activeTabId: activeId,
+      tabs: tabs.map((tab) => ({ ...tab, active: tab.id === activeId })),
+    };
+  }
+  function waitForNativeTab(tabId: string): Promise<void> {
+    if (!native || nativeReadyTabs.has(tabId)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const finish = () => resolve();
+      const waiters = nativeReadyWaiters.get(tabId) ?? new Set<() => void>();
+      waiters.add(finish);
+      nativeReadyWaiters.set(tabId, waiters);
+      window.setTimeout(() => {
+        if (!nativeReadyWaiters.get(tabId)?.delete(finish)) return;
+        if (nativeReadyWaiters.get(tabId)?.size === 0) nativeReadyWaiters.delete(tabId);
+        reject(new Error("The new browser tab did not become ready."));
+      }, 15_000);
+    });
+  }
   const emit = () => {
+    state = normalizeBrowserState(state);
     listeners.forEach((listener) => listener(state));
     void backendClient.browser.state(state.tabs).catch(() => undefined);
+  };
+  const activateTab = (id: string) => {
+    state = {
+      ...state,
+      activeTabId: id,
+      tabs: state.tabs.map((tab) => ({ ...tab, active: tab.id === id })),
+    };
   };
   const sendNative = (command: string, value = "") =>
     native?.command(command, value);
@@ -115,7 +160,18 @@ export function installGroubotBridge(): void {
   (
     window as Window & { groubotNativeEvent?: (event: NativeEvent) => void }
   ).groubotNativeEvent = (event) => {
-    if (event.type === "READY" || event.type === "CLOSED") return;
+    if (event.type === "READY") {
+      if (event.tabId && event.tabId !== "shell") {
+        nativeReadyTabs.add(event.tabId);
+        nativeReadyWaiters.get(event.tabId)?.forEach((resolve) => resolve());
+        nativeReadyWaiters.delete(event.tabId);
+      }
+      return;
+    }
+    if (event.type === "CLOSED") {
+      nativeReadyTabs.delete(event.tabId);
+      return;
+    }
     if (event.type === "RESIZE") {
       window.dispatchEvent(new Event("resize"));
       return;
@@ -228,6 +284,8 @@ export function installGroubotBridge(): void {
     createTab: async (input?: string) => {
       const id = crypto.randomUUID();
       const isDownloads = input === "groubot://downloads";
+      const isExternal = Boolean(input && /^https?:\/\//i.test(input));
+      const url = isExternal ? normalizeExternalAddress(input!) : input ?? homeTab.url;
       state = {
         tabs: [
           ...state.tabs.map((tab) => ({ ...tab, active: false })),
@@ -235,23 +293,21 @@ export function installGroubotBridge(): void {
             ...homeTab,
             id,
             active: true,
-            kind: isDownloads ? "downloads" : "home",
-            url: input ?? homeTab.url,
-            title: isDownloads ? "Downloads" : homeTab.title,
+            kind: isDownloads ? "downloads" : isExternal ? "web" : "home",
+            url,
+            title: isDownloads ? "Downloads" : isExternal ? url : homeTab.title,
+            isLoading: isExternal,
           },
         ],
         activeTabId: id,
       };
+      if (isExternal) sendNative("NAVIGATE", `${id}\t${url}`);
       emit();
       void backendClient.browser.state(state.tabs);
     },
     selectTab: async (id: string) => {
       const selected = state.tabs.find((tab) => tab.id === id);
-      state = {
-        ...state,
-        activeTabId: id,
-        tabs: state.tabs.map((tab) => ({ ...tab, active: tab.id === id })),
-      };
+      activateTab(id);
       sendNative("SELECT_TAB", selected?.kind === "web" ? id : "home");
       emit();
       void backendClient.browser.state(state.tabs);
@@ -333,24 +389,22 @@ export function installGroubotBridge(): void {
       const url = normalizeExternalAddress(input);
       const currentId = state.activeTabId ?? homeTab.id;
       const current = state.tabs.find((tab) => tab.id === currentId);
-      const activeId =
-        current?.kind === "home" ? crypto.randomUUID() : currentId;
+      const activeId = current?.kind === "web" ? currentId : crypto.randomUUID();
+      const nextTab = {
+        ...homeTab,
+        id: activeId,
+        kind: "web" as const,
+        url,
+        title: url,
+        isLoading: true,
+        active: true,
+      };
       state = {
         ...state,
         activeTabId: activeId,
-        tabs: state.tabs.map((tab) =>
-          tab.id === currentId
-            ? {
-              ...tab,
-              id: activeId,
-              kind: "web",
-              url,
-              title: url,
-              isLoading: true,
-              active: true,
-            }
-            : { ...tab, active: false },
-        ),
+        tabs: current?.kind === "web"
+          ? state.tabs.map((tab) => tab.id === currentId ? { ...tab, ...nextTab } : { ...tab, active: false })
+          : [...state.tabs.map((tab) => ({ ...tab, active: false })), nextTab],
       } as BrowserState;
       if (native) sendNative("NAVIGATE", `${activeId}\t${url}`);
       else window.location.assign(url);
@@ -439,7 +493,6 @@ export function installGroubotBridge(): void {
           break;
         }
         case "open_tab": {
-          const activeId = state.activeTabId;
           const id = crypto.randomUUID();
           const url = payload.url
             ? normalizeExternalAddress(String(payload.url))
@@ -450,22 +503,24 @@ export function installGroubotBridge(): void {
             kind: payload.url ? "web" : "home",
             url,
             title: payload.url ? url : "Groubot",
-            active: false,
+            active: true,
             isLoading: Boolean(payload.url),
             controlledByTaskId: payload.url ? "agent-active" : undefined,
           } as any;
           state = {
             ...state,
             tabs: [
-              ...state.tabs.map((item) => ({
-                ...item,
-                active: item.id === activeId,
-              })),
+              ...state.tabs.map((item) => ({ ...item, active: false })),
               tab,
             ],
-            activeTabId: activeId,
+            activeTabId: id,
           };
-          if (payload.url) sendNative("NAVIGATE", `${id}\t${url}`);
+          if (payload.url) {
+            const ready = waitForNativeTab(id);
+            sendNative("NAVIGATE", `${id}\t${url}`);
+            await ready;
+          }
+          else sendNative("SELECT_TAB", "home");
           emit();
           result = { tabId: id, url };
           break;
@@ -484,10 +539,18 @@ export function installGroubotBridge(): void {
             throw new Error("Target tab is not an external website tab.");
           state = {
             ...state,
+            activeTabId: tab.id,
             tabs: state.tabs.map((item) =>
               item.id === payload.tabId
-                ? { ...item, controlledByTaskId: "agent-active" }
-                : item,
+                ? {
+                    ...item,
+                    active: true,
+                    controlledByTaskId: "agent-active",
+                    isLoading: true,
+                    url,
+                    title: url,
+                  }
+                : { ...item, active: false },
             ),
           };
           emit();
@@ -510,7 +573,7 @@ export function installGroubotBridge(): void {
         case "inspect_page":
           result = await evaluatePage(
             payload.tabId,
-            "(()=>({url:location.href,title:document.title,text:(document.body?.innerText||'').slice(0,12000),elements:[...document.querySelectorAll('a,button,input,textarea,select,[role=button],[role=textbox],[contenteditable=\"true\"],canvas')].slice(0,100).map((e,i)=>({index:i,tag:e.tagName.toLowerCase(),role:e.getAttribute('role'),text:(e.innerText||e.getAttribute('aria-label')||e.getAttribute('data-placeholder')||e.getAttribute('aria-placeholder')||e.getAttribute('placeholder')||'').slice(0,200),type:e.getAttribute('type'),contenteditable:e.getAttribute('contenteditable')==='true',disabled:e.matches(':disabled')}))}))()",
+            "(()=>{const elements=[...document.querySelectorAll('a,button,input,textarea,select,[role=button],[role=textbox],[contenteditable=\"true\"],canvas')].slice(0,100);const selector=(e)=>{if(e.id)return '#'+CSS.escape(e.id);for(const attr of ['name','aria-label','placeholder','data-testid']){const value=e.getAttribute(attr);if(value)return `${e.tagName.toLowerCase()}[${attr}=\"${value.replaceAll('\\\"','\\\\\\\"')}\"]`;}const parts=[];let node=e;while(node&&node.nodeType===1&&node!==document.body){let part=node.tagName.toLowerCase();let sibling=node;let index=1;while((sibling=sibling.previousElementSibling))if(sibling.tagName===node.tagName)index++;parts.unshift(`${part}:nth-of-type(${index})`);node=node.parentElement;}return 'body>'+parts.join('>');};return {url:location.href,title:document.title,text:(document.body?.innerText||'').slice(0,12000),elements:elements.map((e,i)=>({index:i,selector:selector(e),tag:e.tagName.toLowerCase(),role:e.getAttribute('role'),text:(e.innerText||e.getAttribute('aria-label')||e.getAttribute('data-placeholder')||e.getAttribute('aria-placeholder')||e.getAttribute('placeholder')||'').slice(0,200),type:e.getAttribute('type'),contenteditable:e.getAttribute('contenteditable')==='true',disabled:e.matches(':disabled')}))};})()",
           );
           break;
         case "capture_screenshot":
@@ -551,23 +614,36 @@ export function installGroubotBridge(): void {
             showAgentCursorScript(selector, "type"),
           )) as { x: number; y: number };
           try {
-            if (
-              !sendNative(
-                "BROWSER_TYPE",
-                JSON.stringify({ tabId: payload.tabId, text }),
-              )
-            ) {
+            try {
+              // DOM insertion is deterministic for ordinary inputs and
+              // contenteditable controls, and avoids platform-specific key
+              // code differences in Chromium/Linux.
               result = await evaluatePage(
                 payload.tabId,
                 typeTextScript(selector, text),
               );
-            } else {
+            } catch (domError) {
+              if (
+                !sendNative(
+                  "BROWSER_TYPE",
+                  JSON.stringify({ tabId: payload.tabId, text }),
+                )
+              ) {
+                throw domError;
+              }
               await new Promise((resolve) =>
                 setTimeout(
                   resolve,
                   Math.max(400, Math.min(1200, text.length * 35)),
                 ),
               );
+              const observed = await evaluatePage(
+                payload.tabId,
+                `(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e?String(e.value??e.textContent??""):""})()`,
+              );
+              if (typeof observed !== "string" || !observed.includes(text)) {
+                throw new Error("The browser did not accept the requested text.");
+              }
               result = {
                 typed: true,
                 length: text.length,
@@ -575,6 +651,12 @@ export function installGroubotBridge(): void {
                 x: point.x,
                 y: point.y,
               };
+            }
+            if (!result) {
+                result = await evaluatePage(
+                  payload.tabId,
+                  typeTextScript(selector, text),
+                );
             }
           } finally {
             await evaluatePage(payload.tabId, hideAgentCursorScript()).catch(
@@ -606,8 +688,13 @@ export function installGroubotBridge(): void {
   };
   const pollBrowserRequests = async () => {
     try {
-      for (const request of await backendClient.browser.pending())
-        void executeBrowserRequest(request);
+      for (const request of await backendClient.browser.pending()) {
+        if (browserRequestsInFlight.has(request.requestId)) continue;
+        browserRequestsInFlight.add(request.requestId);
+        void executeBrowserRequest(request).finally(() => {
+          browserRequestsInFlight.delete(request.requestId);
+        });
+      }
     } catch {
       /* backend may still be starting */
     }
@@ -646,19 +733,38 @@ export function installGroubotBridge(): void {
       );
   };
   const pollRun = async (requestId: string, conversationId: string) => {
+    if (polledRequests.has(requestId)) return;
+    polledRequests.add(requestId);
     let offset = 0;
-    while (!cancelledRequests.has(requestId)) {
-      const snapshot = await backendClient.chats.run(requestId);
-      for (const event of snapshot.events.slice(offset))
-        emitStream({ ...event, requestId, conversationId } as ChatStreamEvent);
-      offset = snapshot.events.length;
-      if (snapshot.done) break;
-      await new Promise((resolve) => setTimeout(resolve, 120));
+    try {
+      while (!cancelledRequests.has(requestId)) {
+        const snapshot = await backendClient.chats.run(requestId);
+        for (const event of snapshot.events.slice(offset))
+          emitStream({ ...event, requestId, conversationId } as ChatStreamEvent);
+        offset = snapshot.events.length;
+        if (snapshot.done) break;
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+    } finally {
+      polledRequests.delete(requestId);
+      cancelledRequests.delete(requestId);
     }
-    cancelledRequests.delete(requestId);
+  };
+  const resumeActiveRuns = async () => {
+    try {
+      const activeRuns = await backendClient.chats.active();
+      await Promise.all(
+        activeRuns
+          .filter((run) => !run.done)
+          .map((run) => pollRun(run.requestId, run.conversationId)),
+      );
+    } catch {
+      /* The backend may still be starting; a later renderer request will retry. */
+    }
   };
   const chats = {
     list: () => backendClient.chats.list(),
+    active: () => backendClient.chats.active(),
     get: async (id: string) => (await backendClient.chats.get(id)) ?? undefined,
     create: (
       agentId?: string | null,
@@ -668,13 +774,16 @@ export function installGroubotBridge(): void {
     sendMessage: async ({
       conversationId,
       content,
+      metadata,
     }: {
       conversationId: string;
       content: string;
+      metadata?: ChatMessageMetadata;
     }) => {
       const started = await backendClient.chats.sendMessage(
         conversationId,
         content,
+        metadata,
       );
       void pollRun(started.requestId, conversationId).catch((error: unknown) =>
         emitStream({
@@ -689,6 +798,11 @@ export function installGroubotBridge(): void {
       );
       return started;
     },
+    updateMessageMetadata: ({ conversationId, messageId, metadata }: {
+      conversationId: string;
+      messageId: string;
+      metadata: ChatMessageMetadata;
+    }) => backendClient.chats.updateMessageMetadata(conversationId, messageId, metadata),
     cancel: async (requestId: string) => {
       cancelledRequests.add(requestId);
       emitStream({ requestId, conversationId: "", type: "cancelled" });
@@ -749,12 +863,25 @@ export function installGroubotBridge(): void {
       reason: "The CEF backend bridge is not connected yet.",
     }),
   };
+  const automations = {
+    list: () => backendClient.automations.list(),
+    create: (input: AutomationInput) => backendClient.automations.create(input),
+    update: (id: string, input: AutomationUpdate) =>
+      backendClient.automations.update(id, input),
+    setStatus: (id: string, status: "active" | "paused") =>
+      backendClient.automations.setStatus(id, status),
+    run: (id: string) => backendClient.automations.run(id),
+    remove: (id: string) => backendClient.automations.remove(id),
+  };
+  void resumeActiveRuns();
+  window.setInterval(() => void resumeActiveRuns(), 1_000);
   window.groubot = {
     version: "cef",
     browser,
     agents,
     groups,
     skills: backendClient.skills,
+    automations,
     chats,
     browserTasks,
     memories,

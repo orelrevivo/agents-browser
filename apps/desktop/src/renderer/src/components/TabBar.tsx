@@ -28,20 +28,23 @@ export function TabBar({
             : "flex min-w-0 flex-1 items-end gap-1 overflow-hidden"
         }
       >
-        {state.tabs.map((tab) => (
-          <div
-            className={
-              isSidebar
-                ? "flex w-full items-center gap-1"
-                : "flex items-end gap-1"
-            }
-            key={tab.id}
-          >
-            <button
-              className={`group browser-tab flex items-center gap-2 text-left text-[13px] transition-all ${isSidebar ? "h-10 min-w-0 flex-1 rounded-md border px-2.5" : "h-10 min-w-48 max-w-64 mb-1 rounded-xl border border-b-0 px-3.5"} ${tab.active ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"} ${tab.controlledByTaskId ? "browser-tab-agent-active" : ""}`}
-              onClick={() => void window.groubot.browser.selectTab(tab.id)}
-              type="button"
+        {state.tabs.map((tab) => {
+          const isActive = tab.id === state.activeTabId;
+          return (
+            <div
+              className={
+                isSidebar
+                  ? "flex w-full items-center gap-1"
+                  : "flex items-end gap-1"
+              }
+              key={tab.id}
             >
+              <button
+                aria-current={isActive ? "page" : undefined}
+                className={`group browser-tab flex items-center gap-2 text-left text-[13px] transition-colors ${isSidebar ? "h-10 min-w-0 flex-1 rounded-md border px-2.5" : "h-10 min-w-48 max-w-64 mb-1 rounded-xl border border-b-0 px-3.5"} ${isActive ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"} ${tab.controlledByTaskId ? "browser-tab-agent-active" : ""}`}
+                onClick={() => void window.groubot.browser.selectTab(tab.id)}
+                type="button"
+              >
               {tab.kind === "home" ? (
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
                   <Sparkles className="size-3.5" />
@@ -93,14 +96,22 @@ export function TabBar({
                   event.stopPropagation();
                   void window.groubot.browser.closeTab(tab.id);
                 }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void window.groubot.browser.closeTab(tab.id);
+                  }
+                }}
                 role="button"
                 tabIndex={0}
               >
                 <X className="size-3.5" />
               </span>
-            </button>
-          </div>
-        ))}
+              </button>
+            </div>
+          );
+        })}
         {!isSidebar && (
           <Button
             aria-label="New tab"

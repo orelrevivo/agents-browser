@@ -7,6 +7,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { randomUUID } from "node:crypto";
 import {
   agents,
+  automationTasks,
   agentGroupMembers,
   agentGroups,
   browserTasks,
@@ -22,6 +23,8 @@ import {
   renameConversationSchema,
   permissionModeSchema,
   type ChatMessage,
+  type ChatMessageReference,
+  type ChatMessageMetadata,
   type Conversation,
   type ConversationWithMessages,
 } from "./chats.js";
@@ -55,6 +58,15 @@ import {
   type AgentGroupInput,
   type AgentGroupUpdate,
 } from "./groups.js";
+import {
+  automationIdSchema,
+  automationInputSchema,
+  automationStatusSchema,
+  automationUpdateSchema,
+  type AutomationInput,
+  type AutomationTask,
+  type AutomationUpdate,
+} from "./automations.js";
 
 export { agentIdSchema, agentInputSchema } from "./agents.js";
 export type { Agent, AgentInput } from "./agents.js";
@@ -66,6 +78,12 @@ export {
 } from "./chats.js";
 export type {
   ChatMessage,
+  ChatMessageReference,
+  ChatMessageMetadata,
+  ChatMessageMetadataBase,
+  ChatQuestion,
+  ChatQuestionItem,
+  ChatQuestionOption,
   Conversation,
   ConversationWithMessages,
 } from "./chats.js";
@@ -87,6 +105,13 @@ export { skillIdSchema, skillInputSchema } from "./skills.js";
 export type { Skill, SkillInput } from "./skills.js";
 export { agentGroupInputSchema, agentGroupUpdateSchema, groupIdSchema } from "./groups.js";
 export type { AgentGroup, AgentGroupInput, AgentGroupUpdate } from "./groups.js";
+export {
+  automationIdSchema,
+  automationInputSchema,
+  automationStatusSchema,
+  automationUpdateSchema,
+} from "./automations.js";
+export type { AutomationInput, AutomationTask, AutomationUpdate } from "./automations.js";
 
 function openDatabase(databasePath: string): Database.Database {
   if (databasePath !== ":memory:") {
@@ -207,7 +232,7 @@ export function createAgentRepository(
       return db
         .select()
         .from(agents)
-        .orderBy(desc(agents.isDefault), asc(agents.name))
+        .orderBy(desc(agents.isPinned), desc(agents.isDefault), asc(agents.name))
         .all()
         .map(toAgent);
     },
@@ -238,6 +263,7 @@ export function createAgentRepository(
             existing.isDefault,
             existing.createdAt.getTime(),
             Date.now(),
+            existing.isPinned,
           ),
         )
         .where(eq(agents.id, id))
@@ -299,6 +325,15 @@ export function createAgentRepository(
           .where(eq(agents.id, id))
           .run();
       });
+      return this.get(id)!;
+    },
+    setPinned(id: string, pinned: boolean): Agent {
+      const target = this.get(id);
+      if (!target) throw new Error("Agent not found");
+      db.update(agents)
+        .set({ isPinned: pinned, updatedAt: new Date() })
+        .where(eq(agents.id, id))
+        .run();
       return this.get(id)!;
     },
     close(): void {
@@ -375,6 +410,7 @@ export function createChatRepository(
     appendUserMessage(input: {
       conversationId: string;
       content: string;
+      metadata?: ChatMessageMetadata;
     }): ChatMessage {
       const valid = chatMessageInputSchema.parse(input);
       const conversation = db
@@ -389,6 +425,7 @@ export function createChatRepository(
         role: "user",
         content: valid.content,
         agentId: null,
+        metadata: input.metadata ? JSON.stringify(input.metadata) : null,
         createdAt: new Date(),
       } as const;
       db.transaction((tx) => {
@@ -410,6 +447,7 @@ export function createChatRepository(
       conversationId: string;
       content: string;
       agentId?: string | null;
+      metadata?: ChatMessageMetadata;
     }): ChatMessage {
       const valid = chatMessageInputSchema.parse(input);
       const conversation = db
@@ -424,6 +462,7 @@ export function createChatRepository(
         role: "assistant",
         content: valid.content,
         agentId: input.agentId ?? null,
+        metadata: input.metadata ? JSON.stringify(input.metadata) : null,
         createdAt: new Date(),
       } as const;
       db.transaction((tx) => {
@@ -434,6 +473,33 @@ export function createChatRepository(
           .run();
       });
       return toMessage(message);
+    },
+    updateMessageMetadata(input: {
+      conversationId: string;
+      messageId: string;
+      metadata: ChatMessageMetadata;
+    }): ChatMessage {
+      const conversationId = conversationIdSchema.parse(input.conversationId);
+      const message = db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, input.messageId))
+        .get();
+      if (!message || message.conversationId !== conversationId)
+        throw new Error("Message not found");
+      db.transaction((tx) => {
+        tx.update(messages)
+          .set({ metadata: JSON.stringify(input.metadata) })
+          .where(eq(messages.id, input.messageId))
+          .run();
+        tx.update(conversations)
+          .set({ updatedAt: new Date() })
+          .where(eq(conversations.id, conversationId))
+          .run();
+      });
+      return toMessage(
+        db.select().from(messages).where(eq(messages.id, input.messageId)).get()!,
+      );
     },
     rename(input: { id: string; title: string }): Conversation {
       const valid = renameConversationSchema.parse(input);
@@ -567,6 +633,124 @@ export function createMemoryRepository(
         )
         .slice(0, limit)
         .map((entry) => entry.memory);
+    },
+    close(): void {
+      sqlite.close();
+    },
+  };
+}
+
+export function createAutomationRepository(
+  databasePath: string,
+  migrationsFolder: string,
+) {
+  const sqlite = openDatabase(databasePath);
+  sqlite.pragma("journal_mode = WAL");
+  const db = drizzle(sqlite);
+  migrate(db, { migrationsFolder });
+
+  return {
+    list(): AutomationTask[] {
+      return db
+        .select()
+        .from(automationTasks)
+        .orderBy(desc(automationTasks.updatedAt))
+        .all()
+        .map(toAutomationTask);
+    },
+    get(id: string): AutomationTask | undefined {
+      const row = db
+        .select()
+        .from(automationTasks)
+        .where(eq(automationTasks.id, automationIdSchema.parse(id)))
+        .get();
+      return row ? toAutomationTask(row) : undefined;
+    },
+    create(input: AutomationInput, nextRunAt: number): AutomationTask {
+      const valid = automationInputSchema.parse(input);
+      const id = randomUUID();
+      const now = new Date();
+      db.insert(automationTasks)
+        .values({
+          id,
+          name: valid.name,
+          description: valid.description,
+          task: valid.task,
+          frequency: valid.frequency,
+          timeOfDay: valid.timeOfDay,
+          weeklyDay: valid.weeklyDay,
+          timezone: valid.timezone,
+          agentIds: JSON.stringify(valid.agentIds),
+          status: "active",
+          nextRunAt: new Date(nextRunAt),
+          lastRunAt: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+      return this.get(id)!;
+    },
+    update(id: string, input: AutomationUpdate, nextRunAt?: number): AutomationTask {
+      const current = this.get(id);
+      if (!current) throw new Error("Automation task not found.");
+      const valid = automationUpdateSchema.parse(input);
+      const merged = automationInputSchema.parse({
+        name: valid.name ?? current.name,
+        description: valid.description ?? current.description,
+        task: valid.task ?? current.task,
+        frequency: valid.frequency ?? current.frequency,
+        timeOfDay: valid.timeOfDay ?? current.timeOfDay,
+        weeklyDay: valid.weeklyDay ?? current.weeklyDay,
+        timezone: valid.timezone ?? current.timezone,
+        agentIds: valid.agentIds ?? current.agentIds,
+      });
+      db.update(automationTasks)
+        .set({
+          name: merged.name,
+          description: merged.description,
+          task: merged.task,
+          frequency: merged.frequency,
+          timeOfDay: merged.timeOfDay,
+          weeklyDay: merged.weeklyDay,
+          timezone: merged.timezone,
+          agentIds: JSON.stringify(merged.agentIds),
+          nextRunAt: nextRunAt === undefined ? undefined : new Date(nextRunAt),
+          updatedAt: new Date(),
+        })
+        .where(eq(automationTasks.id, automationIdSchema.parse(id)))
+        .run();
+      return this.get(id)!;
+    },
+    setStatus(id: string, status: "active" | "paused"): AutomationTask {
+      const validId = automationIdSchema.parse(id);
+      automationStatusSchema.parse(status);
+      db.update(automationTasks)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(automationTasks.id, validId))
+        .run();
+      return this.get(validId)!;
+    },
+    markRun(id: string, lastRunAt: number, nextRunAt: number): AutomationTask {
+      const validId = automationIdSchema.parse(id);
+      db.update(automationTasks)
+        .set({
+          lastRunAt: new Date(lastRunAt),
+          nextRunAt: new Date(nextRunAt),
+          updatedAt: new Date(),
+        })
+        .where(eq(automationTasks.id, validId))
+        .run();
+      return this.get(validId)!;
+    },
+    due(now = Date.now()): AutomationTask[] {
+      return this.list().filter(
+        (task) => task.status === "active" && task.nextRunAt <= now,
+      );
+    },
+    remove(id: string): void {
+      db.delete(automationTasks)
+        .where(eq(automationTasks.id, automationIdSchema.parse(id)))
+        .run();
     },
     close(): void {
       sqlite.close();
@@ -733,12 +917,21 @@ function toConversation(row: typeof conversations.$inferSelect): Conversation {
   };
 }
 function toMessage(row: typeof messages.$inferSelect): ChatMessage {
+  let metadata: ChatMessageMetadata | undefined;
+  if (row.metadata) {
+    try {
+      metadata = JSON.parse(row.metadata) as ChatMessageMetadata;
+    } catch {
+      metadata = undefined;
+    }
+  }
   return {
     id: row.id,
     conversationId: row.conversationId,
     role: row.role === "assistant" ? "assistant" : "user",
     content: row.content,
     agentId: row.agentId ?? null,
+    ...(metadata ? { metadata } : {}),
     createdAt: row.createdAt.getTime(),
   };
 }
@@ -762,6 +955,31 @@ function toBrowserTask(row: typeof browserTasks.$inferSelect): BrowserTask {
     tabIds: parseJsonArray(row.tabIds),
     progress: parseProgress(row.progress),
     error: row.error,
+    createdAt: row.createdAt.getTime(),
+    updatedAt: row.updatedAt.getTime(),
+  };
+}
+function toAutomationTask(row: typeof automationTasks.$inferSelect): AutomationTask {
+  let agentIds: string[] = [];
+  try {
+    const parsed = JSON.parse(row.agentIds);
+    if (Array.isArray(parsed)) agentIds = parsed.filter((id): id is string => typeof id === "string");
+  } catch {
+    agentIds = [];
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    task: row.task,
+    frequency: row.frequency as AutomationTask["frequency"],
+    timeOfDay: row.timeOfDay,
+    weeklyDay: row.weeklyDay,
+    timezone: row.timezone,
+    agentIds,
+    status: row.status as AutomationTask["status"],
+    nextRunAt: row.nextRunAt.getTime(),
+    lastRunAt: row.lastRunAt?.getTime() ?? null,
     createdAt: row.createdAt.getTime(),
     updatedAt: row.updatedAt.getTime(),
   };
@@ -792,6 +1010,7 @@ function toRow(
   isDefault: boolean,
   createdAt: Date | number,
   updatedAt = Date.now(),
+  isPinned = false,
 ) {
   return {
     id,
@@ -809,6 +1028,7 @@ function toRow(
     toolPermissions: JSON.stringify(input.toolPermissions),
     memoryPreferences: JSON.stringify(input.memoryPreferences),
     isDefault,
+    isPinned,
     createdAt: typeof createdAt === "number" ? new Date(createdAt) : createdAt,
     updatedAt: new Date(updatedAt),
   };
@@ -831,6 +1051,7 @@ function toAgent(row: typeof agents.$inferSelect): Agent {
     toolPermissions: parseBooleanRecord(row.toolPermissions),
     memoryPreferences: parseBooleanRecord(row.memoryPreferences),
     isDefault: row.isDefault,
+    isPinned: row.isPinned,
     createdAt: row.createdAt.getTime(),
     updatedAt: row.updatedAt.getTime(),
   };

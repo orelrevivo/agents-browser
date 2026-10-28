@@ -4,7 +4,12 @@ import type {
   AgentGroupInput,
   AgentGroupUpdate,
   AgentInput,
+  AutomationInput,
+  AutomationTask,
+  AutomationUpdate,
   ChatMessage,
+  ChatMessageMetadata,
+  ChatQuestion,
   Conversation,
   ConversationWithMessages,
   Memory,
@@ -21,7 +26,8 @@ export interface BackendRunEvent {
     | "completed"
     | "cancelled"
     | "tool_activity"
-    | "approval_request"
+  | "approval_request"
+  | "question"
     | "error";
   delta?: string;
   content?: string;
@@ -32,12 +38,20 @@ export interface BackendRunEvent {
   approvalId?: string;
   description?: string;
   input?: Record<string, unknown>;
+  question?: ChatQuestion;
 }
 
 export interface BackendRunSnapshot {
   conversationId: string;
   events: BackendRunEvent[];
   done: boolean;
+}
+
+export interface BackendActiveRun {
+  requestId: string;
+  conversationId: string;
+  done: boolean;
+  status: "queued" | "running";
 }
 
 export interface BrowserRequest {
@@ -82,6 +96,11 @@ export const backendClient = {
       request<void>(`/api/agents/${id}`, { method: "DELETE" }),
     setDefault: (id: string) =>
       request<Agent>(`/api/agents/${id}/default`, { method: "PUT" }),
+    setPinned: (id: string, pinned: boolean) =>
+      request<Agent>(`/api/agents/${id}/pinned`, {
+        method: "PUT",
+        body: JSON.stringify({ pinned }),
+      }),
   },
   groups: {
     list: () => request<AgentGroup[]>("/api/groups"),
@@ -116,10 +135,15 @@ export const backendClient = {
           permissionMode: permissionMode ?? "ask",
         }),
       }),
-    sendMessage: (conversationId: string, content: string) =>
+    sendMessage: (conversationId: string, content: string, metadata?: ChatMessageMetadata) =>
       request<{ requestId: string; message: ChatMessage }>(
         `/api/chats/${conversationId}/messages`,
-        { method: "POST", body: JSON.stringify({ conversationId, content }) },
+        { method: "POST", body: JSON.stringify({ conversationId, content, metadata }) },
+      ),
+    updateMessageMetadata: (conversationId: string, messageId: string, metadata: ChatMessageMetadata) =>
+      request<ChatMessage>(
+        `/api/chats/${conversationId}/messages/${messageId}`,
+        { method: "PATCH", body: JSON.stringify({ metadata }) },
       ),
     rename: (id: string, title: string) =>
       request<Conversation>(`/api/chats/${id}`, {
@@ -145,6 +169,7 @@ export const backendClient = {
       request<void>(`/api/chats/${id}`, { method: "DELETE" }),
     run: (requestId: string) =>
       request<BackendRunSnapshot>(`/api/runs/${requestId}`),
+    active: () => request<BackendActiveRun[]>("/api/runs?active=true"),
   },
   memories: {
     list: (agentId: string) => request<Memory[]>(`/api/memories/${agentId}`),
@@ -202,5 +227,29 @@ export const backendClient = {
         method: "POST",
         body: JSON.stringify({ approved }),
       }),
+  },
+  automations: {
+    list: () => request<AutomationTask[]>("/api/automations"),
+    create: (input: AutomationInput) =>
+      request<AutomationTask>("/api/automations", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    update: (id: string, input: AutomationUpdate) =>
+      request<AutomationTask>(`/api/automations/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    setStatus: (id: string, status: "active" | "paused") =>
+      request<AutomationTask>(`/api/automations/${id}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status }),
+      }),
+    run: (id: string) =>
+      request<{ started: boolean }>(`/api/automations/${id}/run`, {
+        method: "POST",
+      }),
+    remove: (id: string) =>
+      request<void>(`/api/automations/${id}`, { method: "DELETE" }),
   },
 };

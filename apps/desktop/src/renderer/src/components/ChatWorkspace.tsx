@@ -4,8 +4,11 @@ import type {
   AgentGroup,
   AgentInput,
   ChatMessage,
+  ChatMessageReference,
   Conversation,
   ConversationWithMessages,
+  ChatMessageMetadata,
+  ChatQuestion,
 } from "@groubot/db";
 import type { BrowserTabState } from "@groubot/browser/types";
 import type { Skill } from "@groubot/db";
@@ -39,6 +42,7 @@ import { ChatMessageList } from "./ChatMessageList";
 import { ChatSidebar } from "./ChatSidebar";
 import { AgentEditorDialog } from "./AgentEditorDialog";
 import { HomeAgentStrip } from "./HomeAgentStrip";
+import { avatarColorHsl, parseCustomAvatar } from "./Customize Avatar/avatar-model";
 import darkBackground from "../../../../public/Background-dark.png";
 import lightBackground from "../../../../public/Background-light.png";
 
@@ -61,6 +65,9 @@ export function ChatWorkspace({
   const [activeGroup, setActiveGroup] = useState<AgentGroup>();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [browserTabs, setBrowserTabs] = useState<BrowserTabState[]>([]);
+  const [activeConversationIds, setActiveConversationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [conversation, setConversation] = useState<ConversationWithMessages>();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [permissionMode, setPermissionMode] = useState<"ask" | "full">("ask");
@@ -80,6 +87,7 @@ export function ChatWorkspace({
   const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>(
     [],
   );
+  const [replyingTo, setReplyingTo] = useState<ChatMessage>();
   const [error, setError] = useState("");
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -115,6 +123,28 @@ export function ChatWorkspace({
       ),
     [agents, conversation?.agentId, selectedAgentId],
   );
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const customAvatar = selectedAgent?.avatarData
+      ? parseCustomAvatar(selectedAgent.avatarData)
+      : undefined;
+    if (!customAvatar) {
+      root.style.removeProperty("--groubot-agent-primary");
+      root.style.removeProperty("--primary");
+      root.style.removeProperty("--ring");
+      return;
+    }
+    const primary = avatarColorHsl(customAvatar.color);
+    root.style.setProperty("--groubot-agent-primary", `hsl(${primary})`);
+    root.style.setProperty("--primary", primary);
+    root.style.setProperty("--ring", primary);
+    return () => {
+      root.style.removeProperty("--groubot-agent-primary");
+      root.style.removeProperty("--primary");
+      root.style.removeProperty("--ring");
+    };
+  }, [selectedAgent?.avatarData]);
   const visibleMessages = useMemo(
     () => mergeMessages(conversation?.messages ?? [], optimisticMessages),
     [conversation?.messages, optimisticMessages],
@@ -123,6 +153,13 @@ export function ChatWorkspace({
   async function refreshConversations() {
     setConversations(await window.groubot.chats.list());
   }
+
+  useEffect(() => {
+    const handleConversationsChanged = () => void refreshConversations();
+    window.addEventListener("groubot:conversations-changed", handleConversationsChanged);
+    return () => window.removeEventListener("groubot:conversations-changed", handleConversationsChanged);
+  }, []);
+
   async function loadConversation(
     id?: string,
     options: { clearError?: boolean } = {},
@@ -169,8 +206,8 @@ export function ChatWorkspace({
       if (!conversationId)
         setSelectedAgentId(
           availableAgents.find((agent) => agent.isDefault)?.id ??
-            availableAgents[0]?.id ??
-            null,
+          availableAgents[0]?.id ??
+          null,
         );
     });
   }, [conversationId]);
@@ -184,6 +221,24 @@ export function ChatWorkspace({
   );
 
   useEffect(() => {
+    let mounted = true;
+    const refreshActiveRuns = async () => {
+      try {
+        const runs = await window.groubot.chats.active();
+        if (mounted) setActiveConversationIds(new Set(runs.filter((run) => !run.done).map((run) => run.conversationId)));
+      } catch {
+        /* The backend may still be starting. */
+      }
+    };
+    void refreshActiveRuns();
+    const interval = window.setInterval(() => void refreshActiveRuns(), 800);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
     if (conversation) {
       setSelectedAgentId(conversation.agentId ?? null);
       setPermissionMode(conversation.permissionMode);
@@ -195,7 +250,11 @@ export function ChatWorkspace({
   useEffect(
     () =>
       window.groubot.chats.onStream((event) => {
-        if (conversationId && event.conversationId !== conversationId) return;
+        if (conversationId && event.conversationId !== conversationId) {
+          if (event.type === "completed" || event.type === "error" || event.type === "cancelled")
+            void refreshConversations();
+          return;
+        }
         if (event.type === "started") {
           setActiveRequestId(event.requestId);
           setStreamingText("");
@@ -226,6 +285,13 @@ export function ChatWorkspace({
             void window.groubot.browserTasks.get(event.taskId).then((task) => {
               if (task) setTaskActivity(task);
             });
+        } else if (event.type === "question") {
+          setStreaming(false);
+          setActiveRequestId(undefined);
+          setStreamingText("");
+          setToolActivity(undefined);
+          setThinking(false);
+          void loadConversation(event.conversationId, { clearError: false });
         } else if (event.type === "completed") {
           setStreaming(false);
           setActiveRequestId(undefined);
@@ -293,19 +359,23 @@ export function ChatWorkspace({
     [],
   );
 
-  async function send(content: string) {
+  async function send(content: string, metadata?: ChatMessageMetadata): Promise<boolean> {
     if (!selectedAgentId && !conversation?.agentId) {
       setError("Create or select an agent before starting a chat.");
-      return;
+      return false;
     }
 
     const localMessageId = crypto.randomUUID();
+    const outgoingMetadata = metadata ?? (replyingTo
+      ? ({ type: "reply", replyTo: toMessageReference(replyingTo) } satisfies ChatMessageMetadata)
+      : undefined);
     const optimisticMessage: ChatMessage = {
       id: localMessageId,
       conversationId: conversation?.id ?? "pending",
       role: "user",
       content,
       agentId: null,
+      metadata: outgoingMetadata,
       createdAt: Date.now(),
     };
     setOptimisticMessages((current) => [...current, optimisticMessage]);
@@ -334,6 +404,7 @@ export function ChatWorkspace({
         const started = await window.groubot.chats.sendMessage({
           conversationId: created.id,
           content,
+          metadata: outgoingMetadata,
         });
         if (started.taskId)
           void window.groubot.browserTasks.get(started.taskId).then((task) => {
@@ -347,12 +418,14 @@ export function ChatWorkspace({
         setActiveRequestId(started.requestId);
         setStreaming(true);
         setStreamingText("");
+        setReplyingTo(undefined);
         await refreshConversations();
-        return;
+        return true;
       }
       const started = await window.groubot.chats.sendMessage({
         conversationId: conversation.id,
         content,
+        metadata: outgoingMetadata,
       });
       if (started.taskId)
         void window.groubot.browserTasks.get(started.taskId).then((task) => {
@@ -366,15 +439,64 @@ export function ChatWorkspace({
       setActiveRequestId(started.requestId);
       setStreaming(true);
       setStreamingText("");
+      setReplyingTo(undefined);
+      return true;
     } catch (cause) {
       setStreaming(false);
       setToolActivity(undefined);
       setError(
         cause instanceof Error ? cause.message : "Unable to save this message.",
       );
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+
+  function submitQuestion(question: ChatQuestion, answers: Record<string, string>) {
+    const answerText = question.questions
+      .map((item) => {
+        const selected = item.options.find((option) => option.id === answers[item.id]);
+        return `- ${item.prompt}: ${selected?.label ?? answers[item.id]}`;
+      })
+      .join("\n");
+    return send(`Answers to “${question.title}”:\n${answerText}`, {
+      type: "question_answer",
+      questionId: question.id,
+      answers,
+    });
+  }
+
+  async function updateMessageMetadata(
+    message: ChatMessage,
+    metadata: ChatMessageMetadata,
+  ) {
+    const updated = await window.groubot.chats.updateMessageMetadata({
+      conversationId: message.conversationId,
+      messageId: message.id,
+      metadata,
+    });
+    setConversation((current) =>
+      current
+        ? {
+          ...current,
+          messages: current.messages.map((item) =>
+            item.id === updated.id ? updated : item,
+          ),
+        }
+        : current,
+    );
+    return updated;
+  }
+
+  async function addReaction(message: ChatMessage, emoji: string) {
+    const current = message.metadata;
+    const reactions = { ...(current?.reactions ?? {}) };
+    reactions[emoji] = (reactions[emoji] ?? 0) + 1;
+    await updateMessageMetadata(
+      message,
+      ({ ...(current ?? { type: "message" }), reactions } as ChatMessageMetadata),
+    );
   }
 
   async function newChat() {
@@ -445,6 +567,13 @@ export function ChatWorkspace({
     await refreshConversations();
     if (id === conversationId) await loadConversation(id);
   }
+
+  async function setAgentPinned(id: string, pinned: boolean) {
+    const updated = await window.groubot.agents.setPinned(id, pinned);
+    setAgents((current) =>
+      current.map((agent) => (agent.id === updated.id ? updated : agent)),
+    );
+  }
   async function saveConversationName() {
     if (!conversation || !renameValue.trim()) return;
     await renameChat(conversation.id, renameValue);
@@ -474,16 +603,18 @@ export function ChatWorkspace({
   );
   return (
     <>
-      <div className="flex h-full min-h-0 bg-background">
+      <div className="flex h-full min-h-0 bg-background dark:bg-[#161616]">
         <ChatSidebar
           activeId={groupId ?? conversationId}
           activeSection={groupId ? "group" : "chat"}
           collapsed={sidebarCollapsed}
           conversations={groupId ? [] : conversations}
           agents={agents}
+          activeConversationIds={activeConversationIds}
           onNew={newChat}
           onDelete={deleteChat}
           onPin={setChatPinned}
+          onAgentPin={setAgentPinned}
           onRename={renameChat}
           onSkills={() =>
             void window.groubot.browser.navigate("groubot://skills")
@@ -493,6 +624,9 @@ export function ChatWorkspace({
           }
           onNewGroup={() =>
             window.dispatchEvent(new Event("groubot:new-group"))
+          }
+          onAutomation={() =>
+            window.dispatchEvent(new Event("groubot:automation"))
           }
           onSelect={selectChat}
           onToggle={() => setSidebarCollapsed((value) => !value)}
@@ -507,7 +641,7 @@ export function ChatWorkspace({
             />
           )}
           {isConversation && (
-            <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-4">
+            <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/40 px-3.5">
               <div className="flex min-w-0 items-center gap-2">
                 {activeGroup ? (
                   <div className="flex items-center -space-x-2">
@@ -516,12 +650,12 @@ export function ChatWorkspace({
                       .slice(0, 3)
                       .map((agent) => (
                         <div className="rounded-full border-2 border-background" key={agent.id}>
-                          <AgentAvatar agent={agent} size="sm" />
+                          <AgentAvatar agent={agent} size="sm" status={activeConversationIds.has(conversationId ?? "") ? "working" : undefined} />
                         </div>
                       ))}
                   </div>
                 ) : (
-                  <AgentAvatar agent={selectedAgent} size="sm" />
+                  <AgentAvatar agent={selectedAgent} size="sm" status={activeConversationIds.has(conversationId ?? "") ? "working" : undefined} />
                 )}
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{title}</p>
@@ -629,11 +763,14 @@ export function ChatWorkspace({
                 agent={selectedAgent}
                 agents={agents}
                 messages={visibleMessages}
-                streaming={streaming}
+                streaming={streaming || activeConversationIds.has(conversationId)}
                 streamingText={streamingText}
                 skillActivity={skillActivity}
                 toolActivity={toolActivity}
                 thinking={thinking}
+                onQuestionAnswer={submitQuestion}
+                onReply={setReplyingTo}
+                onReaction={addReaction}
               />
             ) : null
           ) : optimisticMessages.length ? (
@@ -641,11 +778,14 @@ export function ChatWorkspace({
               agent={selectedAgent}
               agents={agents}
               messages={visibleMessages}
-              streaming={streaming}
+              streaming={streaming || activeConversationIds.has(conversationId ?? "")}
               streamingText={streamingText}
               skillActivity={skillActivity}
               toolActivity={toolActivity}
               thinking={thinking}
+              onQuestionAnswer={submitQuestion}
+              onReply={setReplyingTo}
+              onReaction={addReaction}
             />
           ) : null}
           <div
@@ -666,9 +806,13 @@ export function ChatWorkspace({
                 canSend={Boolean(conversation?.agentId ?? selectedAgentId)}
                 compact={!isConversation}
                 onCancel={cancel}
-                onSubmit={send}
+                onClearReply={() => setReplyingTo(undefined)}
+                onSubmit={async (content) => {
+                  await send(content);
+                }}
                 onPermissionModeChange={changePermissionMode}
                 permissionMode={permissionMode}
+                replyingTo={replyingTo}
                 selectedAgentName={selectedAgent?.name}
                 skills={skills}
                 tabs={browserTabs}
@@ -795,6 +939,15 @@ function formatToolActivity(toolName?: string) {
     scroll_page: "Scrolling the page",
   };
   return labels[toolName ?? ""] ?? "Using browser tools";
+}
+
+function toMessageReference(message: ChatMessage): ChatMessageReference {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    createdAt: message.createdAt,
+  };
 }
 
 function formatSkillActivity(toolName?: string) {

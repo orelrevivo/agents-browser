@@ -14,6 +14,7 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/shape.h>
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -149,6 +150,43 @@ void CefApplication::HandleCommand(const std::string& command, const std::string
 
 void CefApplication::HandleCommandOnUi(const std::string& command, const std::string& value) {
   CEF_REQUIRE_UI_THREAD();
+  if (command == "BROWSER_CLICK" || command == "BROWSER_TYPE" ||
+      command == "BROWSER_EVAL") {
+    // Keep the stdin command channel on the same native action path as the
+    // renderer bridge. This is also useful for deterministic host-level
+    // browser smoke tests.
+    HandleNativeCommand(shell_browser_, command, value);
+    return;
+  }
+  if (command == "CREATE_TAB") {
+    const auto [tab_id, url] = SplitValue(value);
+    if (tab_id.empty()) return;
+    active_tab_id_ = tab_id;
+    auto found = external_tabs_.find(tab_id);
+    if (found == external_tabs_.end()) {
+      CreateExternalTab(tab_id, url.empty() ? "about:blank" : url);
+    } else if (found->second && found->second->GetMainFrame() && !url.empty()) {
+      found->second->GetMainFrame()->LoadURL(url);
+    }
+    SetTabVisibility(tab_id, true);
+    return;
+  }
+  if (command == "SELECT_TAB") {
+    active_tab_id_ = value.empty() ? "home" : value;
+    SetTabVisibility(active_tab_id_, true);
+    return;
+  }
+  if (command == "CLOSE_TAB") {
+    const auto found = external_tabs_.find(value);
+    if (found != external_tabs_.end() && found->second) {
+      found->second->GetHost()->CloseBrowser(true);
+    }
+    if (active_tab_id_ == value) {
+      active_tab_id_ = "home";
+      SetTabVisibility("home", true);
+    }
+    return;
+  }
   auto browser = shell_browser_;
   if (active_tab_id_ != "home") {
     const auto found = external_tabs_.find(active_tab_id_);
@@ -217,6 +255,12 @@ void CefApplication::HandleBrowserEvent(CefRefPtr<CefBrowser> browser, const std
   if (event == "READY") {
     if (value.empty()) {
       shell_browser_ = browser;
+      // The shell owns the tab bar and chat UI. If a stale website sibling
+      // survived a previous host session, make the shell the visible surface
+      // as soon as it is ready instead of allowing that sibling to remain on
+      // top of the new renderer.
+      active_tab_id_ = "home";
+      SetTabVisibility("home", true);
       channel_->Send("READY", "shell");
     } else {
       external_tabs_[value] = browser;
@@ -235,8 +279,16 @@ void CefApplication::HandleBrowserEvent(CefRefPtr<CefBrowser> browser, const std
           content_x,
           content_y,
           content_width,
-          content_height);
-      SetTabVisibility(value, value.rfind("__popup_", 0) == 0 || value == active_tab_id_);
+          content_height,
+          value == active_tab_id_);
+      // Popup browsers share the same native surface pool as regular web
+      // tabs. They must not force themselves above the shell when Google (or
+      // another site) opens an auth/helper window; visibility is owned by the
+      // selected Groubot tab.
+      // An inactive tab becoming ready must not hide the currently selected
+      // surface. Its window was already unmapped by AttachBrowserWindow;
+      // only an explicit selection is allowed to change stacking/visibility.
+      if (value == active_tab_id_) SetTabVisibility(value, true);
       NotifyShell("READY", value, "");
       channel_->Send("READY", value);
     }
@@ -321,6 +373,11 @@ void CefApplication::HandleNativeCommand(CefRefPtr<CefBrowser>, const std::strin
     const auto found = external_tabs_.find(tab_id);
     if (found == external_tabs_.end() || !found->second) return;
     auto host = found->second->GetHost();
+    // Browser actions may run while the user is viewing another Groubot tab.
+    // Focus the target CEF view explicitly; DOM inspection works in the
+    // background, but native mouse/key events are ignored by some sites when
+    // the target view has never received focus.
+    host->SetFocus(true);
     if (command == "BROWSER_CLICK") {
       CefMouseEvent mouse;
       mouse.x = dictionary->GetInt("x");
@@ -332,13 +389,30 @@ void CefApplication::HandleNativeCommand(CefRefPtr<CefBrowser>, const std::strin
     }
     const auto text = dictionary->GetString("text").ToString16();
     for (const auto character : text) {
-      CefKeyEvent key;
-      key.size = sizeof(key);
-      key.type = KEYEVENT_CHAR;
-      key.character = character;
-      key.unmodified_character = character;
-      key.focus_on_editable_field = true;
-      host->SendKeyEvent(key);
+      const auto ascii = static_cast<unsigned int>(character);
+      const auto lowercase = ascii < 128 && std::islower(static_cast<unsigned char>(ascii));
+      const auto uppercase = ascii < 128 && std::isupper(static_cast<unsigned char>(ascii));
+      const auto modifiers = uppercase ? EVENTFLAG_SHIFT_DOWN : 0;
+      const auto windows_key_code = lowercase ? static_cast<int>(ascii - 'a' + 'A')
+                                              : static_cast<int>(ascii);
+
+      CefKeyEvent key_down;
+      key_down.size = sizeof(key_down);
+      key_down.type = KEYEVENT_RAWKEYDOWN;
+      key_down.windows_key_code = windows_key_code;
+      key_down.character = character;
+      key_down.unmodified_character = character;
+      key_down.modifiers = modifiers;
+      key_down.focus_on_editable_field = true;
+      host->SendKeyEvent(key_down);
+
+      CefKeyEvent key_char = key_down;
+      key_char.type = KEYEVENT_CHAR;
+      host->SendKeyEvent(key_char);
+
+      CefKeyEvent key_up = key_down;
+      key_up.type = KEYEVENT_KEYUP;
+      host->SendKeyEvent(key_up);
     }
     return;
   }
@@ -429,7 +503,12 @@ void CefApplication::ConfigurePopup(CefRefPtr<CefBrowser> opener,
   (void)settings;
 }
 
-void CefApplication::AttachBrowserWindow(CefRefPtr<CefBrowser> browser, int x, int y, int width, int height) {
+void CefApplication::AttachBrowserWindow(CefRefPtr<CefBrowser> browser,
+                                         int x,
+                                         int y,
+                                         int width,
+                                         int height,
+                                         bool visible) {
   if (!browser || !parent_window_) return;
   const auto handle = browser->GetHost()->GetWindowHandle();
   if (!handle) {
@@ -446,7 +525,11 @@ void CefApplication::AttachBrowserWindow(CefRefPtr<CefBrowser> browser, int x, i
   XReparentWindow(display, handle, parent_window_, x, y);
   XSetWindowBorderWidth(display, handle, 0);
   XMoveResizeWindow(display, handle, x, y, static_cast<unsigned>(width), static_cast<unsigned>(height));
-  XMapWindow(display, handle);
+  // Geometry updates must not change tab visibility. Previously this always
+  // mapped every website surface, so a resize/layout update could make an
+  // old Google Docs page appear above the selected Groubot chat tab.
+  if (visible) XMapWindow(display, handle);
+  else XUnmapWindow(display, handle);
   XFlush(display);
   XCloseDisplay(display);
 }
@@ -474,7 +557,7 @@ void CefApplication::ApplyBrowserBounds() {
   GetContentBounds(&x, &y, &width, &height);
 
   for (const auto& [tab_id, browser] : external_tabs_) {
-    AttachBrowserWindow(browser, x, y, width, height);
+    AttachBrowserWindow(browser, x, y, width, height, tab_id == active_tab_id_);
     browser->GetHost()->WasResized();
   }
 }
@@ -525,6 +608,13 @@ void CefApplication::EnforceTabBounds() {
           if (children) XFree(children);
           if (parent != parent_window_) {
             XReparentWindow(display, handle, parent_window_, x, y);
+            // Reparenting a mapped X11 child may map it again. Restore the
+            // selected-tab invariant immediately after the reparent.
+            if (!overlay_visible_ && tab_id == active_tab_id_) {
+              XMapWindow(display, handle);
+            } else {
+              XUnmapWindow(display, handle);
+            }
           }
         }
 
@@ -536,6 +626,15 @@ void CefApplication::EnforceTabBounds() {
           tab->GetHost()->NotifyMoveOrResizeStarted();
           tab->GetHost()->NotifyScreenInfoChanged();
           tab->GetHost()->WasResized();
+        }
+
+        // CEF may map a child while recovering a renderer or applying new
+        // bounds. Keep visibility authoritative in native state rather than
+        // allowing a late paint/resize to cover the React shell.
+        if (!overlay_visible_ && tab_id == active_tab_id_) {
+          XMapWindow(display, handle);
+        } else {
+          XUnmapWindow(display, handle);
         }
       }
       XFlush(display);
@@ -561,6 +660,7 @@ void CefApplication::SetOverlayVisibility(const std::string& value) {
 
   const bool open = value.rfind("open", 0) == 0;
   if (open) {
+    overlay_visible_ = true;
     // Browser chrome and external CEF pages are separate native surfaces.
     // While a chrome panel is open, temporarily hide the page surface so the
     // React shell can render the panel normally without X11 sibling-window
@@ -582,6 +682,7 @@ void CefApplication::SetOverlayVisibility(const std::string& value) {
   }
 
   if (!open) {
+    overlay_visible_ = false;
     // Restore the full React shell first, then restore the active website
     // surface above the content area. No browser tab is closed or recreated.
     XShapeCombineMask(display, shell_handle, ShapeBounding, 0, 0, None, ShapeSet);
@@ -706,6 +807,13 @@ void CefApplication::SetTabVisibility(const std::string& tab_id, bool visible) {
     // page after every tab switch prevents the shell's background surface
     // from covering a page after a click, popup, or navigation event.
     XRaiseWindow(display, active_handle);
+  } else if (shell_browser_) {
+    // When returning to a Groubot tab there is no active website surface.
+    // Raise the shell explicitly; mapping it alone does not move it above a
+    // previously raised X11 sibling window, which made every tab appear to
+    // show the last website (often Google Docs).
+    const auto shell_handle = shell_browser_->GetHost()->GetWindowHandle();
+    if (shell_handle) XRaiseWindow(display, shell_handle);
   }
 
   XFlush(display);

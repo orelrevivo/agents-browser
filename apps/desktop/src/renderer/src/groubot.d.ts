@@ -8,8 +8,13 @@ import type {
   AgentGroupInput,
   AgentGroupUpdate,
   AgentInput,
+  AutomationInput,
+  AutomationTask,
+  AutomationUpdate,
   BrowserTask,
   ChatMessage,
+  ChatMessageMetadata,
+  ChatQuestion,
   Conversation,
   ConversationWithMessages,
   Memory,
@@ -48,6 +53,7 @@ interface GroubotAgentsApi {
   duplicate: (id: string) => Promise<Agent>;
   remove: (id: string) => Promise<void>;
   setDefault: (id: string) => Promise<Agent>;
+  setPinned: (id: string, pinned: boolean) => Promise<Agent>;
 }
 
 interface GroubotGroupsApi {
@@ -69,6 +75,15 @@ interface GroubotSkillsApi {
   remove: (id: string) => Promise<void>;
 }
 
+interface GroubotAutomationsApi {
+  list: () => Promise<AutomationTask[]>;
+  create: (input: AutomationInput) => Promise<AutomationTask>;
+  update: (id: string, input: AutomationUpdate) => Promise<AutomationTask>;
+  setStatus: (id: string, status: "active" | "paused") => Promise<AutomationTask>;
+  run: (id: string) => Promise<{ started: boolean }>;
+  remove: (id: string) => Promise<void>;
+}
+
 interface GroubotChatsApi {
   list: () => Promise<Conversation[]>;
   get: (id: string) => Promise<ConversationWithMessages | undefined>;
@@ -80,7 +95,19 @@ interface GroubotChatsApi {
   sendMessage: (input: {
     conversationId: string;
     content: string;
+    metadata?: ChatMessageMetadata;
   }) => Promise<{ requestId: string; message: ChatMessage; taskId?: string }>;
+  active: () => Promise<{
+    requestId: string;
+    conversationId: string;
+    done: boolean;
+    status: "queued" | "running";
+  }[]>;
+  updateMessageMetadata: (input: {
+    conversationId: string;
+    messageId: string;
+    metadata: ChatMessageMetadata;
+  }) => Promise<ChatMessage>;
   cancel: (requestId: string) => Promise<string>;
   onStream: (listener: (event: ChatStreamEvent) => void) => () => void;
   respondToApproval: (
@@ -127,6 +154,7 @@ interface ChatStreamEvent {
   | "error"
   | "tool_activity"
   | "approval_request"
+  | "question"
   | "waiting_for_human";
   delta?: string;
   content?: string;
@@ -138,6 +166,7 @@ interface ChatStreamEvent {
   approvalId?: string;
   description?: string;
   input?: Record<string, unknown>;
+  question?: ChatQuestion;
 }
 
 interface GroubotBrowserTasksApi {
@@ -166,6 +195,7 @@ declare global {
       agents: GroubotAgentsApi;
       groups: GroubotGroupsApi;
       skills: GroubotSkillsApi;
+      automations: GroubotAutomationsApi;
       chats: GroubotChatsApi;
       browserTasks: GroubotBrowserTasksApi;
       memories: GroubotMemoriesApi;

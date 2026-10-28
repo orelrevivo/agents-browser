@@ -34,14 +34,27 @@ export function TabToken({
   url,
   removable = false,
   onRemove,
+  onClick,
 }: {
   title: string;
   url: string;
   removable?: boolean;
   onRemove?: () => void;
+  onClick?: () => void;
 }) {
   return (
-    <span className="inline-flex max-w-64 items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-1 text-xs text-foreground">
+    <span
+      className="inline-flex max-w-64 items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-1 text-xs text-foreground transition-colors hover:border-primary/50 hover:bg-accent"
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (!onClick || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        onClick();
+      }}
+      title={`Open ${url} in a new tab`}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+    >
       <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
       <span className="min-w-0 truncate" title={url}>
         {title}
@@ -60,7 +73,14 @@ export function TabToken({
   );
 }
 
-export function MessageContent({ content }: { content: string }) {
+export function MessageContent({
+  content,
+  onOpenUrl,
+}: {
+  content: string;
+  onOpenUrl?: (url: string) => void;
+}) {
+  const openUrl = onOpenUrl ?? ((url: string) => void window.groubot.browser.createTab(url));
   const lines = content.split("\n");
   const blocks: React.ReactNode[] = [];
   let index = 0;
@@ -91,7 +111,7 @@ export function MessageContent({ content }: { content: string }) {
     } else {
       blocks.push(
         <p className="whitespace-pre-wrap break-words" key={`line-${index}`}>
-          <InlineMessageContent content={line} />
+          <InlineMessageContent content={line} onOpenUrl={openUrl} />
         </p>,
       );
     }
@@ -101,7 +121,7 @@ export function MessageContent({ content }: { content: string }) {
   return <div className="space-y-2">{blocks}</div>;
 }
 
-function InlineMessageContent({ content }: { content: string }) {
+function InlineMessageContent({ content, onOpenUrl }: { content: string; onOpenUrl: (url: string) => void }) {
   const pattern = /\/([\w-]+)|\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
   const parts: React.ReactNode[] = [];
   let cursor = 0;
@@ -112,11 +132,13 @@ function InlineMessageContent({ content }: { content: string }) {
     if (match[1]) {
       parts.push(<SkillToken key={`${match.index}-${match[1]}`} name={match[1]} />);
     } else if (match[2] && match[3]) {
+      const url = match[3];
       parts.push(
         <TabToken
           key={`${match.index}-${match[2]}`}
           title={match[2]}
-          url={match[3]}
+          url={url}
+          onClick={() => onOpenUrl(url)}
         />,
       );
     }

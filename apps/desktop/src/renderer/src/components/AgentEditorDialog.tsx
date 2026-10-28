@@ -5,6 +5,8 @@ import { Button, Input, Label, Sheet, SheetContent, SheetDescription, SheetTitle
 import { Brain, Globe2, Trash2 } from "lucide-react";
 import { AgentAvatarRail } from "./AgentAvatarRail";
 import { defaultAgentInput } from "./agent-defaults";
+import { AvatarStudioDialog } from "./Customize Avatar/AvatarStudioDialog";
+import { parseCustomAvatar } from "./Customize Avatar/avatar-model";
 
 const firstAvatar = defaultAgentInput.avatarData;
 const formSchema = z.object({
@@ -29,6 +31,7 @@ export function AgentEditorDialog({ agent, open, onOpenChange, onSave }: AgentEd
   const [memories, setMemories] = useState<Memory[]>([]);
   const [memoryDraft, setMemoryDraft] = useState("");
   const [aiConfig, setAIConfig] = useState<{ model: string; apiKeyConfigured: boolean; webSearchEnabled: boolean; memoryEnabled: boolean }>();
+  const [studioOpen, setStudioOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -74,7 +77,7 @@ export function AgentEditorDialog({ agent, open, onOpenChange, onSave }: AgentEd
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full min-w-0 gap-0 overflow-visible p-0 sm:w-1/2" side="right">
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <AgentAvatarRail onSelect={(path) => { update("avatarType", "image"); update("avatarData", path); }} selected={form.avatarData} />
+          <AgentAvatarRail onCustomize={() => setStudioOpen(true)} onSelect={(value) => { update("avatarType", parseCustomAvatar(value) ? "icon" : "image"); update("avatarData", value); }} selected={form.avatarData} />
           <header className="sticky top-0 z-10 shrink-0 border-b border-border bg-card/95 px-8 py-5 pr-16 backdrop-blur sm:pl-16">
             <SheetTitle className="text-lg">{agent ? "Edit agent" : "Create an agent"}</SheetTitle>
             <SheetDescription className="mt-1 max-w-xl text-xs">Shape a focused companion for future Groubot conversations.</SheetDescription>
@@ -90,10 +93,11 @@ export function AgentEditorDialog({ agent, open, onOpenChange, onSave }: AgentEd
           <footer className="sticky bottom-0 z-10 flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card/95 px-8 py-4 pl-16 backdrop-blur"><span className="text-xs text-destructive">{errors.form}</span><div className="ml-auto flex gap-2"><Button onClick={() => onOpenChange(false)} variant="ghost">Cancel</Button><Button disabled={saving} onClick={() => void submit()}>{saving ? "Saving…" : agent ? "Save changes" : "Create agent"}</Button></div></footer>
         </div>
       </SheetContent>
+      <AvatarStudioDialog open={studioOpen} onOpenChange={setStudioOpen} value={form.avatarData} onChange={(value) => { update("avatarType", value.startsWith("data:image/") ? "image" : "icon"); update("avatarData", value); }} />
     </Sheet>
   );
 }
 
 function Field({ error, label, children }: { error?: string; label: string; children: React.ReactNode }) { return <div className="grid gap-2"><Label>{label}</Label>{children}{error && <p className="text-xs text-destructive">{error}</p>}</div>; }
 function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) { return <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">{eyebrow}</p><h2 className="mt-1 text-sm font-medium text-foreground">{title}</h2></div>; }
-function toInput(agent: Agent): AgentInput { return { name: agent.name, description: agent.description, avatarType: "image", avatarData: agent.avatarType === "image" && (agent.avatarData.startsWith("/agents/") || agent.avatarData.startsWith("./agents/") || agent.avatarData.startsWith("data:image/")) ? agent.avatarData.replace(/^\.\/agents\//, "/agents/") : firstAvatar, provider: agent.provider, model: agent.model, systemInstructions: agent.systemInstructions, goals: agent.goals, customInstructions: agent.customInstructions, temperature: agent.temperature, modelSettings: agent.modelSettings, toolPermissions: agent.toolPermissions, memoryPreferences: agent.memoryPreferences }; }
+function toInput(agent: Agent): AgentInput { const custom = parseCustomAvatar(agent.avatarData); const image = agent.avatarData.startsWith("data:image/") || agent.avatarData.startsWith("/agents/") || agent.avatarData.startsWith("./agents/"); return { name: agent.name, description: agent.description, avatarType: custom ? "icon" : "image", avatarData: custom || image ? agent.avatarData.replace(/^\.\/agents\//, "/agents/") : firstAvatar, provider: agent.provider, model: agent.model, systemInstructions: agent.systemInstructions, goals: agent.goals, customInstructions: agent.customInstructions, temperature: agent.temperature, modelSettings: agent.modelSettings, toolPermissions: agent.toolPermissions, memoryPreferences: agent.memoryPreferences }; }

@@ -31,7 +31,12 @@ class CefApplication final : public CefApp,
                       CefWindowInfo& window_info,
                       CefRefPtr<CefClient>& client,
                       CefBrowserSettings& settings);
-  void AttachBrowserWindow(CefRefPtr<CefBrowser> browser, int x, int y, int width, int height);
+  void AttachBrowserWindow(CefRefPtr<CefBrowser> browser,
+                           int x,
+                           int y,
+                           int width,
+                           int height,
+                           bool visible);
   void SetTabVisibility(const std::string& tab_id, bool visible);
   void NotifyShell(const std::string& type, const std::string& tab_id, const std::string& value);
   void HandleCommandOnUi(const std::string& command, const std::string& value);
@@ -56,6 +61,7 @@ class CefApplication final : public CefApp,
   std::map<int, std::string> browser_tab_ids_;
   std::string active_tab_id_ = "home";
   std::string layout_mode_ = "top";
+  bool overlay_visible_ = false;
   std::vector<std::string> launch_args_;
   IMPLEMENT_REFCOUNTING(CefApplication);
 };

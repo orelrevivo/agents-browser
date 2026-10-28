@@ -24,6 +24,14 @@ body {
   background: hsl(var(--background));
 }
 
+.chat-sidebar {
+  background: hsl(0 0% 6%);
+}
+
+.light .chat-sidebar {
+  background: hsl(0 0% 97%);
+}
+
 button,
 input,
 textarea {
@@ -89,6 +97,143 @@ textarea {
 @keyframes groubot-typing {
   0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
   30% { opacity: 1; transform: translateY(-2px); }
+}
+
+.custom-avatar {
+  color: hsl(var(--foreground));
+}
+
+.rakazo-organic-avatar {
+  overflow: visible;
+  filter: drop-shadow(0 2px 4px hsl(var(--foreground) / 0.22));
+}
+
+.rakazo-organic-avatar-body {
+  transform-origin: center;
+  transition: opacity 180ms ease;
+}
+
+.rakazo-organic-avatar-body-idle {
+  animation: rakazo-organic-idle 5.6s ease-in-out infinite;
+}
+
+.rakazo-organic-avatar-body-working {
+  opacity: 0;
+}
+
+.rakazo-organic-avatar[data-working="true"] .rakazo-organic-avatar-body-idle {
+  opacity: 0;
+}
+
+.rakazo-organic-avatar[data-working="true"] .rakazo-organic-avatar-body-working {
+  opacity: 1;
+  animation: rakazo-organic-working 1.35s ease-in-out infinite;
+}
+
+.rakazo-organic-avatar[data-motion="stretch"] .custom-avatar-body,
+.rakazo-organic-avatar[data-motion="stretch"] .rakazo-organic-avatar-body-working {
+  animation: rakazo-organic-stretch 1.35s ease-in-out infinite;
+}
+
+.rakazo-organic-avatar[data-motion="sway"] .custom-avatar-body,
+.rakazo-organic-avatar[data-motion="sway"] .rakazo-organic-avatar-body-working {
+  animation: rakazo-organic-sway 1.6s ease-in-out infinite;
+}
+
+.rakazo-organic-avatar[data-motion="pulse"] .custom-avatar-body,
+.rakazo-organic-avatar[data-motion="pulse"] .rakazo-organic-avatar-body-working {
+  animation: rakazo-organic-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes rakazo-organic-idle {
+  0%, 100% { transform: translateY(1.2px) scale(1.012, 0.988); }
+  50% { transform: translateY(-1.4px) scale(0.988, 1.012); }
+}
+
+@keyframes rakazo-organic-working {
+  0%, 100% { transform: translateY(2px) scaleX(1.02); }
+  50% { transform: translateY(-3px) scaleX(0.98); }
+}
+
+@keyframes rakazo-organic-stretch {
+  0%, 100% { transform: translateY(2px) scale(1.04, 0.96); }
+  50% { transform: translateY(-3px) scale(0.96, 1.05); }
+}
+
+@keyframes rakazo-organic-sway {
+  0%, 100% { transform: translateX(-2px) rotate(-3deg); }
+  50% { transform: translateX(2px) rotate(3deg); }
+}
+
+@keyframes rakazo-organic-pulse {
+  0%, 100% { transform: scale(0.96); }
+  50% { transform: scale(1.08); }
+}
+
+.custom-avatar-svg {
+  overflow: visible;
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 5px 5px hsl(var(--foreground) / 0.12));
+  animation: custom-avatar-idle 4.8s ease-in-out infinite;
+}
+
+.custom-avatar[data-motion="pulse"] .custom-avatar-svg {
+  animation-name: custom-avatar-pulse;
+}
+
+.custom-avatar[data-motion="sway"] .custom-avatar-svg {
+  animation-name: custom-avatar-sway;
+}
+
+.custom-avatar[data-working="true"] .custom-avatar-svg {
+  animation-duration: 0.9s;
+}
+
+.custom-avatar-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: custom-avatar-eyes 5s ease-in-out infinite;
+}
+
+.custom-avatar-ring {
+  position: absolute;
+  inset: 3px;
+  border: 2px solid hsl(var(--primary) / 0.8);
+  border-radius: 999px;
+  animation: custom-avatar-ring 1.2s ease-out infinite;
+}
+
+@keyframes custom-avatar-idle {
+  0%, 100% { transform: translateY(0) rotate(-1deg) scale(1); }
+  50% { transform: translateY(-3px) rotate(1deg) scale(1.02); }
+}
+
+@keyframes custom-avatar-pulse {
+  0%, 100% { transform: scale(0.96); }
+  50% { transform: scale(1.06); }
+}
+
+@keyframes custom-avatar-sway {
+  0%, 100% { transform: translateX(-2px) rotate(-4deg); }
+  50% { transform: translateX(2px) rotate(4deg); }
+}
+
+@keyframes custom-avatar-eyes {
+  0%, 44%, 48%, 100% { transform: scaleY(1); }
+  46% { transform: scaleY(0.12); }
+}
+
+@keyframes custom-avatar-ring {
+  0% { opacity: 0.9; transform: scale(0.9); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-avatar-svg,
+  .custom-avatar-eyes,
+  .custom-avatar-ring {
+    animation: none !important;
+  }
 }
 
 .marketplace-agent-pattern {

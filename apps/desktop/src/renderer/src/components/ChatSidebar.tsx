@@ -15,25 +15,19 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
   Input,
   ScrollArea,
 } from "@groubot/ui";
 import {
-  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   Pin,
-  PinOff,
-  Pencil,
+  Search,
   Sparkles,
   Store,
+  TimerReset,
   UsersRound,
-  Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AgentAvatar } from "./AgentAvatar";
@@ -41,6 +35,7 @@ import { AgentAvatar } from "./AgentAvatar";
 interface ChatSidebarProps {
   conversations: Conversation[];
   agents?: Agent[];
+  activeConversationIds?: ReadonlySet<string>;
   activeId?: string;
   collapsed: boolean;
   onToggle: () => void;
@@ -48,17 +43,20 @@ interface ChatSidebarProps {
   onSkills: () => void;
   onMarketplace: () => void;
   onNewGroup: () => void;
+  onAutomation?: () => void;
   activeSection: "chat" | "skills" | "marketplace" | "group";
   onGroupSelect?: (id: string) => void;
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onPin: (id: string, pinned: boolean) => Promise<void>;
+  onAgentPin: (id: string, pinned: boolean) => Promise<void>;
 }
 
 export function ChatSidebar({
   conversations,
   agents = [],
+  activeConversationIds = new Set<string>(),
   activeId,
   collapsed,
   onToggle,
@@ -66,11 +64,13 @@ export function ChatSidebar({
   onSkills,
   onMarketplace,
   onNewGroup,
+  onAutomation = () => window.dispatchEvent(new Event("groubot:automation")),
   activeSection,
   onSelect,
   onRename,
   onDelete,
   onPin,
+  onAgentPin,
   onGroupSelect,
 }: ChatSidebarProps) {
   const [deleteTarget, setDeleteTarget] = useState<Conversation>();
@@ -80,9 +80,42 @@ export function ChatSidebar({
   const [groupRenameTarget, setGroupRenameTarget] = useState<AgentGroup>();
   const [groupRenameValue, setGroupRenameValue] = useState("");
   const [groupDeleteTarget, setGroupDeleteTarget] = useState<AgentGroup>();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [latestMessages, setLatestMessages] = useState<Record<string, string>>({});
   const visibleConversations = conversations.filter(
     (conversation) => !conversation.groupId,
   );
+  const sortedConversations = [...visibleConversations].sort((left, right) => {
+    const leftPinned = agents.find((agent) => agent.id === left.agentId)?.isPinned ? 1 : 0;
+    const rightPinned = agents.find((agent) => agent.id === right.agentId)?.isPinned ? 1 : 0;
+    return rightPinned - leftPinned;
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(
+      conversations.map(async (conversation) => {
+        const detail = await window.groubot.chats.get(conversation.id).catch(() => undefined);
+        const latest = detail?.messages.at(-1)?.content;
+        return [conversation.id, latest ?? ""] as const;
+      }),
+    ).then((entries) => {
+      if (!cancelled) setLatestMessages(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversations]);
+
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const matchesSearch = (conversation: Conversation) => {
+    if (!normalizedSearch) return true;
+    const agent = agents.find((candidate) => candidate.id === conversation.agentId);
+    return [agent?.name, agent?.description, conversation.title, latestMessages[conversation.id]]
+      .filter(Boolean)
+      .some((value) => value!.toLowerCase().includes(normalizedSearch));
+  };
 
   function loadGroups() {
     void window.groubot.groups.list().then(setGroups);
@@ -97,34 +130,71 @@ export function ChatSidebar({
 
   return (
     <aside
-      className={`flex shrink-0 flex-col overflow-hidden border-r border-border/70 bg-card/20 transition-[width] duration-200 ease-out ${collapsed ? "w-12" : "w-64"}`}
+      className={`chat-sidebar flex shrink-0 flex-col overflow-hidden border-r border-border/60 bg-background transition-[width,background-color] duration-300 ease-out ${collapsed ? "w-12" : "w-72"}`}
     >
       <div
-        className={`flex h-12 shrink-0 items-center border-b border-border/60 ${collapsed ? "justify-center px-1" : "justify-between px-3"}`}
+        className={`flex h-14 shrink-0 items-center border-b border-border/40 ${collapsed ? "justify-center px-1" : "justify-between px-3.5"}`}
       >
-        {!collapsed && <span className="text-sm">Chats</span>}
-        <Button
-          aria-label={
-            collapsed ? "Expand chat sidebar" : "Collapse chat sidebar"
-          }
-          className="size-7 shrink-0"
-          onClick={onToggle}
-          size="icon"
-          variant="ghost"
-        >
-          {collapsed ? (
-            <PanelLeftOpen className="size-4" />
+        {!collapsed && (
+          searchOpen ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <Search className="size-4 shrink-0 text-muted-foreground" />
+              <Input
+                autoFocus
+                className="h-8 min-w-0 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setSearchQuery("");
+                    setSearchOpen(false);
+                  }
+                }}
+                placeholder="Search agents"
+                value={searchQuery}
+              />
+            </div>
           ) : (
-            <PanelLeftClose className="size-4" />
+            <span className="text-sm font-semibold tracking-tight">Chats</span>
+          )
+        )}
+        <div className="flex items-center gap-0.5">
+          {!collapsed && (
+            <Button
+              aria-label={searchOpen ? "Close agent search" : "Search agents"}
+              className="size-8 shrink-0 rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => {
+                setSearchOpen((value) => !value);
+                if (searchOpen) setSearchQuery("");
+              }}
+              size="icon"
+              variant="ghost"
+            >
+              <Search className="size-4" />
+            </Button>
           )}
-        </Button>
+          <Button
+            aria-label={
+              collapsed ? "Expand chat sidebar" : "Collapse chat sidebar"
+            }
+            className="size-8 shrink-0 rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            onClick={onToggle}
+            size="icon"
+            variant="ghost"
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="size-4" />
+            ) : (
+              <PanelLeftClose className="size-4" />
+            )}
+          </Button>
+        </div>
       </div>
 
       {!collapsed && (
         <>
-          <div className="grid gap-1 p-2 pb-1">
+          <div className="grid gap-1 p-3 pb-2">
             <Button
-              className={`h-8 w-full justify-start gap-2 px-2.5 text-xs ${activeSection === "chat" ? "bg-primary/10 text-foreground hover:bg-primary/15" : "text-muted-foreground"}`}
+              className={`h-9 w-full justify-start gap-2 rounded-md px-3 text-xs ${activeSection === "chat" ? "bg-card text-foreground shadow-sm hover:bg-card" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
               onClick={onNew}
               variant={activeSection === "chat" ? "secondary" : "ghost"}
             >
@@ -132,7 +202,7 @@ export function ChatSidebar({
               New chat
             </Button>
             <Button
-              className={`h-8 w-full justify-start gap-2 px-2.5 text-xs ${activeSection === "skills" ? "bg-primary/10 text-foreground hover:bg-primary/15" : "text-muted-foreground"}`}
+              className={`h-9 w-full justify-start gap-2 rounded-md px-3 text-xs ${activeSection === "skills" ? "bg-card text-foreground shadow-sm hover:bg-card" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
               onClick={onSkills}
               variant="ghost"
             >
@@ -141,7 +211,7 @@ export function ChatSidebar({
             </Button>
             <Button
               type="button"
-              className={`h-8 w-full justify-start gap-2 px-2.5 text-xs ${activeSection === "marketplace" ? "bg-primary/10 text-foreground hover:bg-primary/15" : "text-muted-foreground"}`}
+              className={`h-9 w-full justify-start gap-2 rounded-md px-3 text-xs ${activeSection === "marketplace" ? "bg-card text-foreground shadow-sm hover:bg-card" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
               onClick={onMarketplace}
               variant="ghost"
             >
@@ -149,157 +219,109 @@ export function ChatSidebar({
               Marketplace Agents
             </Button>
             <Button
-              className="h-8 w-full justify-start gap-2 px-2.5 text-xs text-muted-foreground"
+              className="h-9 w-full justify-start gap-2 rounded-md px-3 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
               onClick={onNewGroup}
               variant="ghost"
             >
               <UsersRound className="size-3.5" />
               New Group
             </Button>
+            <Button
+              className="h-9 w-full justify-start gap-2 rounded-md px-3 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={onAutomation}
+              variant="ghost"
+            >
+              <TimerReset className="size-3.5" />
+              Automation Task
+            </Button>
           </div>
 
-          <ScrollArea className="min-h-0 flex-1 px-2">
-            <div className="space-y-1 pb-3">
+          <ScrollArea className="min-h-0 flex-1 px-2.5">
+            <div className="space-y-2 pb-4">
               {groups.length > 0 && (
-                <div className="mb-2 border-t border-border/50 pt-3">
-                  <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                    Groups
-                  </p>
+                <div className="mb-3 border-t border-border/40 pt-4">
                   {[...groups]
                     .sort((left, right) => Number(right.pinned) - Number(left.pinned))
                     .map((group) => (
-                    <button
-                      className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-[11px] transition-colors ${activeId === group.id && activeSection === "group" ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"}`}
-                      key={group.id}
-                      onClick={() => {
-                        if (onGroupSelect) {
-                          onGroupSelect(group.id);
-                          return;
-                        }
+                      <button
+                        className={`group flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[11px] transition-[background-color,transform] duration-200 ${activeId === group.id && activeSection === "group" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:-translate-y-px hover:bg-accent hover:text-foreground"}`}
+                        key={group.id}
+                        onClick={() => {
+                          if (onGroupSelect) {
+                            onGroupSelect(group.id);
+                            return;
+                          }
 
-                        void window.groubot.browser.navigate(
-                          `groubot://group/${group.id}`,
-                        );
-                      }}
-                      type="button"
-                    >
-                      <UsersRound className="size-3.5 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate" title={group.name}>
-                        {truncateTitle(group.name)}
-                      </span>
-                      {group.pinned && <Pin className="size-3 shrink-0 text-primary" />}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <span
-                            aria-label={`Options for ${group.name}`}
-                            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                            onClick={(event) => event.stopPropagation()}
-                            role="button"
-                            tabIndex={0}
-                          >
-                            <MoreHorizontal className="size-3.5" />
-                          </span>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" side="right" sideOffset={6}>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              void window.groubot.groups
-                                .update(group.id, { pinned: !group.pinned })
-                                .then(() => loadGroups())
-                            }
-                          >
-                            {group.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
-                            {group.pinned ? "Unpin" : "Pin"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setGroupRenameTarget(group);
-                              setGroupRenameValue(group.name);
-                            }}
-                          >
-                            <Pencil className="size-4" /> Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => setGroupDeleteTarget(group)}
-                          >
-                            <Trash2 className="size-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </button>
-                  ))}
+                          void window.groubot.browser.navigate(
+                            `groubot://group/${group.id}`,
+                          );
+                        }}
+                        type="button"
+                      >
+                        <UsersRound className="size-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate" title={group.name}>
+                          {truncateTitle(group.name)}
+                        </span>
+                        {group.pinned && <Pin className="size-3 shrink-0 text-primary" />}
+                      </button>
+                    ))}
                 </div>
               )}
-              {visibleConversations.length === 0 ? (
+              {visibleConversations.filter(matchesSearch).length === 0 ? (
                 <p className="px-3 py-8 text-center text-xs leading-5 text-muted-foreground">
                   Your conversations will appear here.
                 </p>
               ) : (
-                visibleConversations.map((conversation) => (
-                  <div
-                    className={`group flex items-center gap-1 rounded-md px-1.5 py-0.5 ${activeId === conversation.id ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"}`}
-                    key={conversation.id}
-                  >
-                    <AgentAvatar
-                      agent={agents.find((agent) => agent.id === conversation.agentId)}
-                      size="xs"
-                    />
-                    <button
-                      className="min-w-0 flex-1 truncate py-1.5 text-left text-[11px]"
-                      title={conversation.title}
-                      onClick={() => onSelect(conversation.id)}
-                      type="button"
+                sortedConversations.filter(matchesSearch).map((conversation) => {
+                  const conversationAgent = agents.find((agent) => agent.id === conversation.agentId);
+                  return (
+                    <div
+                      className={`group flex min-h-[72px] items-center gap-3 rounded-2xl px-3 py-2 transition-[background-color,transform,box-shadow] duration-200 ${activeId === conversation.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:-translate-y-px hover:bg-accent hover:text-foreground"}`}
+                      key={conversation.id}
+                      onContextMenu={(event) => {
+                        if (!conversationAgent) return;
+                        event.preventDefault();
+                        void onAgentPin(conversationAgent.id, !conversationAgent.isPinned);
+                      }}
                     >
-                      {truncateTitle(conversation.title)}
-                    </button>
-                    {conversation.pinned && (
-                      <Pin className="size-3 shrink-0 text-primary" />
-                    )}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          aria-label={`Options for ${conversation.title}`}
-                          className="size-6 shrink-0 opacity-60 transition-opacity hover:opacity-100 group-hover:opacity-100"
-                          size="icon"
-                          variant="ghost"
-                        >
-                          <MoreHorizontal className="size-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" side="right" sideOffset={6}>
-                        <DropdownMenuItem
-                          onClick={() =>
-                            void onPin(conversation.id, !conversation.pinned)
-                          }
-                        >
-                          {conversation.pinned ? (
-                            <PinOff className="size-4" />
-                          ) : (
-                            <Pin className="size-4" />
-                          )}
-                          {conversation.pinned ? "Unpin" : "Pin"}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setRenameTarget(conversation);
-                            setRenameValue(conversation.title);
-                          }}
-                        >
-                          <Pencil className="size-4" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => setDeleteTarget(conversation)}
-                        >
-                          <Trash2 className="size-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                ))
+                      <AgentAvatar
+                        agent={conversationAgent}
+                        size="lg"
+                      />
+                      <button
+                        className="flex min-w-0 flex-1 flex-col gap-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        title={conversation.title}
+                        onClick={() => onSelect(conversation.id)}
+                        type="button"
+                      >
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[13px] font-medium text-foreground">
+                            {conversationAgent?.name ?? truncateTitle(conversation.title)}
+                          </span>
+                          <time className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+                            {formatTime(conversation.updatedAt)}
+                            {activeConversationIds.has(conversation.id) && (
+                              <span
+                                aria-label="Agent is working"
+                                className="size-2 animate-pulse rounded-full bg-primary shadow-[0_0_0_3px_hsl(var(--primary)/0.14)]"
+                                title="Agent is working"
+                              />
+                            )}
+                            {conversationAgent?.isPinned && (
+                              <Pin aria-label="Pinned agent" className="size-3 text-primary" />
+                            )}
+                          </time>
+                        </span>
+                        <span className="inline-flex w-fit max-w-[12rem] self-start truncate rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
+                          {conversationAgent?.description || "Your AI companion"}
+                        </span>
+                        <span className="max-w-[20ch] truncate text-[11px] text-muted-foreground">
+                          {truncateMessage(latestMessages[conversation.id] || conversation.title)}
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
           </ScrollArea>
@@ -453,4 +475,17 @@ export function ChatSidebar({
 
 function truncateTitle(title: string) {
   return title.length > 20 ? `${title.slice(0, 20)}…` : title;
+}
+
+function formatTime(timestamp: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(timestamp);
+}
+
+function truncateMessage(message: string, maxLength = 20) {
+  return message.length > maxLength
+    ? `${message.slice(0, maxLength - 1)}…`
+    : message;
 }
