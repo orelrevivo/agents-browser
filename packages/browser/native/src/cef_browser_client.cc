@@ -2,14 +2,179 @@
 
 #include "command_channel.h"
 #include "include/cef_app.h"
+#include "include/cef_browser.h"
+#include "include/cef_context_menu_handler.h"
+#include "include/cef_menu_model.h"
 #include "include/cef_parser.h"
 #include "include/wrapper/cef_helpers.h"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <iostream>
 #include <utility>
 
 namespace {
+
+constexpr int kMenuIdOpenImageInNewTab = MENU_ID_USER_FIRST + 1;
+constexpr int kMenuIdInspect = MENU_ID_USER_FIRST + 2;
+
+class AdBlockResourceRequestHandler final : public CefResourceRequestHandler {
+ public:
+  explicit AdBlockResourceRequestHandler(std::string tab_id) : tab_id_(std::move(tab_id)) {}
+
+  ReturnValue OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser,
+                                   CefRefPtr<CefFrame> frame,
+                                   CefRefPtr<CefRequest> request,
+                                   CefRefPtr<CefCallback>) override {
+    if (!request || !ShouldBlock(request->GetURL().ToString())) return RV_CONTINUE;
+
+    // Keep the log useful without dumping every request made by modern pages.
+    std::cerr << "[groubot-cef] ad-block tab=" << tab_id_
+              << " host=" << Hostname(Lowercase(request->GetURL().ToString())) << std::endl;
+    return RV_CANCEL;
+  }
+
+ private:
+  static std::string Lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+      return static_cast<char>(std::tolower(character));
+    });
+    return value;
+  }
+
+  static std::string Hostname(const std::string& url) {
+    const auto scheme_end = url.find("://");
+    const auto host_start = scheme_end == std::string::npos ? 0 : scheme_end + 3;
+    const auto host_end = url.find_first_of("/?#", host_start);
+    auto host = url.substr(host_start, host_end == std::string::npos ? std::string::npos : host_end - host_start);
+    const auto port = host.find(':');
+    if (port != std::string::npos) host.resize(port);
+    return host;
+  }
+
+  static bool HasDomainSuffix(const std::string& host, const char* domain) {
+    const std::string suffix(domain);
+    return host == suffix || (host.size() > suffix.size() &&
+                              host.compare(host.size() - suffix.size(), suffix.size(), suffix) == 0 &&
+                              host[host.size() - suffix.size() - 1] == '.');
+  }
+
+  static bool ShouldBlock(const std::string& raw_url) {
+    const auto url = Lowercase(raw_url);
+    const auto host = Hostname(url);
+
+    // Common third-party advertising and auction networks. These rules are
+    // intentionally host-based so ordinary page URLs containing "ad" are not
+    // accidentally blocked.
+    static constexpr std::array<const char*, 35> ad_domains = {
+        "doubleclick.net",       "googlesyndication.com", "googleadservices.com",
+        "adservice.google.com",  "adnxs.com",             "adsrvr.org",
+        "amazon-adsystem.com",   "criteo.com",            "pubmatic.com",
+        "rubiconproject.com",    "openx.net",             "taboola.com",
+        "outbrain.com",          "smartadserver.com",     "3lift.com",
+        "bidswitch.net",         "casalemedia.com",       "contextweb.com",
+        "quantserve.com",        "scorecardresearch.com", "media.net",
+        "yandexadexchange.net",  "advertising.com",       "mathtag.com",
+        "rlcdn.com",             "lijit.com",             "turn.com",
+        "demdex.net",            "adsafeprotected.com",   "adform.net",
+        "serving-sys.com",       "exoclick.com",          "popads.net",
+        "trafficjunky.net",      "zedo.com"};
+    for (const auto* domain : ad_domains) {
+      if (HasDomainSuffix(host, domain)) return true;
+    }
+
+    // Path markers used by self-hosted ad servers and ad iframes. Keep this
+    // list narrow; first-party sites often use the word "advertisement" in
+    // legitimate articles and navigation URLs.
+    static constexpr std::array<const char*, 11> ad_paths = {
+        "/adserver", "/adservice", "/adsbygoogle", "/doubleclick/", "/gampad/",
+        "/pagead/", "/prebid/", "/bidrequest", "/adchoice", "?ad_slot=", "&ad_slot="};
+    for (const auto* marker : ad_paths) {
+      if (url.find(marker) != std::string::npos) return true;
+    }
+
+    // YouTube may deliver an ad media request from the same first-party
+    // video host used for normal playback. These query markers identify the
+    // ad variant without blocking ordinary video segments.
+    if (HasDomainSuffix(host, "googlevideo.com") || HasDomainSuffix(host, "youtube.com")) {
+      static constexpr std::array<const char*, 3> first_party_ad_markers = {
+          "adformat=", "ad_type=", "adunit="};
+      for (const auto* marker : first_party_ad_markers) {
+        if (url.find(marker) != std::string::npos) return true;
+      }
+    }
+    return false;
+  }
+
+  std::string tab_id_;
+  IMPLEMENT_REFCOUNTING(AdBlockResourceRequestHandler);
+};
+
+void InstallAdHidingScript(CefRefPtr<CefFrame> frame) {
+  if (!frame || !frame->IsMain()) return;
+
+  // Network filtering cannot distinguish YouTube's first-party ad media from
+  // normal video media. This lightweight cosmetic layer removes known ad
+  // containers and activates the skip control when the site exposes one.
+  static constexpr char kScript[] = R"JS(
+(() => {
+  if (window.__groubotAdBlockRun) {
+    window.__groubotAdBlockRun();
+    return;
+  }
+  window.__groubotAdBlockInstalled = true;
+  const selectors = [
+    '#player-ads', '#masthead-ad', '#panels ytd-ads-engagement-panel-content-renderer',
+    'ytd-ad-slot-renderer', 'ytd-display-ad-renderer',
+    'ytd-promoted-sparkles-web-renderer', 'ytd-in-feed-ad-layout-renderer',
+    'ytd-banner-promo-renderer', 'ytd-mealbar-promo-renderer',
+    'ytd-rich-item-renderer:has(ytd-ad-slot-renderer)',
+    'ytd-rich-item-renderer:has(ytd-display-ad-renderer)',
+    'ytd-rich-section-renderer:has(ytd-ad-slot-renderer)',
+    '.ytp-ad-module', '.ytp-ad-overlay-container', '.ytp-ad-overlay-slot',
+    '.ytp-ad-text', '.ytp-ad-player-overlay', '[data-ad-slot]'
+  ];
+  const hide = () => {
+    document.querySelectorAll(selectors.join(',')).forEach((element) => {
+      element.remove();
+    });
+    document.querySelectorAll('ytd-ad-slot-renderer, ytd-display-ad-renderer').forEach((element) => {
+      const container = element.closest('ytd-rich-item-renderer, ytd-rich-section-renderer, ytd-compact-promoted-video-renderer');
+      (container || element).remove();
+    });
+    document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach((button) => {
+      if (button instanceof HTMLElement) button.click();
+    });
+    document.querySelectorAll('#movie_player.ad-showing, .html5-video-player.ad-showing').forEach((player) => {
+      player.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern').forEach((button) => {
+        if (button instanceof HTMLElement) button.click();
+      });
+      const video = player.querySelector('video') || document.querySelector('video');
+      if (video && Number.isFinite(video.duration) && video.duration > 0) {
+        video.muted = true;
+        video.currentTime = Math.max(0, video.duration - 0.05);
+        void video.play().catch(() => {});
+      }
+    });
+  };
+  window.__groubotAdBlockRun = hide;
+  const installStyle = () => {
+    if (document.getElementById('groubot-ad-block-style')) return;
+    const style = document.createElement('style');
+    style.id = 'groubot-ad-block-style';
+    style.textContent = selectors.join(',') + '{display:none !important;visibility:hidden !important;}';
+    (document.head || document.documentElement).appendChild(style);
+  };
+  installStyle();
+  hide();
+  new MutationObserver(() => { installStyle(); hide(); })
+    .observe(document.documentElement, { childList: true, subtree: true });
+  window.setInterval(hide, 200);
+})();
+)JS";
+  frame->ExecuteJavaScript(kScript, "groubot://ad-block", 0);
+}
 
 std::string EscapeJson(const std::string& value) {
   std::string escaped;
@@ -34,6 +199,17 @@ std::string EscapeJson(const std::string& value) {
 
 CefBrowserClient::CefBrowserClient(CommandChannel* channel, std::string tab_id, EventHandler handler, PopupHandler popup_handler)
     : channel_(channel), tab_id_(std::move(tab_id)), handler_(std::move(handler)), popup_handler_(std::move(popup_handler)) {}
+
+CefRefPtr<CefResourceRequestHandler> CefBrowserClient::GetResourceRequestHandler(
+    CefRefPtr<CefBrowser>,
+    CefRefPtr<CefFrame>,
+    CefRefPtr<CefRequest>,
+    bool,
+    bool,
+    const CefString&,
+    bool&) {
+  return new AdBlockResourceRequestHandler(tab_id_);
+}
 
 void CefBrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
@@ -100,6 +276,54 @@ bool CefBrowserClient::OnConsoleMessage(CefRefPtr<CefBrowser>,
   return false;
 }
 
+void CefBrowserClient::OnBeforeContextMenu(CefRefPtr<CefBrowser>,
+                                           CefRefPtr<CefFrame>,
+                                           CefRefPtr<CefContextMenuParams> params,
+                                           CefRefPtr<CefMenuModel> model) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!params || !model || tab_id_.empty()) return;
+
+  if (params->HasImageContents() && !params->GetSourceUrl().empty()) {
+    model->AddSeparator();
+    model->AddItem(kMenuIdOpenImageInNewTab, "Open image in new tab");
+  }
+
+  model->AddSeparator();
+  model->AddItem(kMenuIdInspect, "Inspect");
+}
+
+bool CefBrowserClient::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                                             CefRefPtr<CefFrame>,
+                                             CefRefPtr<CefContextMenuParams> params,
+                                             int command_id,
+                                             EventFlags) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser || !params || tab_id_.empty()) return false;
+
+  if (command_id == kMenuIdOpenImageInNewTab) {
+    const auto image_url = params->GetSourceUrl().ToString();
+    if (image_url.empty()) return true;
+    // Let the renderer create a normal Groubot web tab so the image gets the
+    // same tab history, selection, visibility, and persistence as any other
+    // user-created tab.
+    handler_(browser, "OPEN_TAB", image_url);
+    return true;
+  }
+
+  if (command_id == kMenuIdInspect) {
+    CefWindowInfo window_info;
+    CefBrowserSettings settings;
+    browser->GetHost()->ShowDevTools(
+        window_info,
+        browser->GetHost()->GetClient(),
+        settings,
+        CefPoint(params->GetXCoord(), params->GetYCoord()));
+    return true;
+  }
+
+  return false;
+}
+
 bool CefBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
                                      const CefKeyEvent& event,
                                      CefEventHandle,
@@ -131,7 +355,10 @@ void CefBrowserClient::OnFaviconURLChange(CefRefPtr<CefBrowser> browser, const s
 }
 
 void CefBrowserClient::OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString& url) {
-  if (frame->IsMain()) handler_(browser, "URL", url.ToString());
+  if (frame->IsMain()) {
+    InstallAdHidingScript(frame);
+    handler_(browser, "URL", url.ToString());
+  }
 }
 
 void CefBrowserClient::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType) {
@@ -139,7 +366,10 @@ void CefBrowserClient::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefF
 }
 
 void CefBrowserClient::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int status_code) {
-  if (frame->IsMain()) handler_(browser, "LOAD_END", std::to_string(status_code));
+  if (frame->IsMain()) {
+    InstallAdHidingScript(frame);
+    handler_(browser, "LOAD_END", std::to_string(status_code));
+  }
 }
 
 void CefBrowserClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser, bool is_loading, bool can_go_back, bool can_go_forward) {

@@ -1,15 +1,17 @@
 import type { BrowserState } from "@groubot/browser/types";
 import { Button } from "@groubot/ui";
-import { Plus, Sparkles, X } from "./icons";
+import { Plus, X } from "./icons";
 import { AlertTriangle, Bot } from "lucide-react";
 import { TabIcon } from "./TabIcon";
 
 export function TabBar({
   state,
   orientation = "top",
+  isLight = false,
 }: {
   state: BrowserState;
   orientation?: "top" | "sidebar";
+  isLight?: boolean;
 }) {
   const isSidebar = orientation === "sidebar";
 
@@ -28,90 +30,95 @@ export function TabBar({
             : "flex min-w-0 flex-1 items-end gap-1 overflow-hidden"
         }
       >
-        {state.tabs.map((tab) => {
-          const isActive = tab.id === state.activeTabId;
-          return (
-            <div
-              className={
-                isSidebar
-                  ? "flex w-full items-center gap-1"
-                  : "flex items-end gap-1"
-              }
-              key={tab.id}
-            >
-              <button
-                aria-current={isActive ? "page" : undefined}
-                className={`group browser-tab flex items-center gap-2 text-left text-[13px] transition-colors ${isSidebar ? "h-10 min-w-0 flex-1 rounded-md border px-2.5" : "h-10 min-w-48 max-w-64 mb-1 rounded-xl border border-b-0 px-3.5"} ${isActive ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"} ${tab.controlledByTaskId ? "browser-tab-agent-active" : ""}`}
-                onClick={() => void window.groubot.browser.selectTab(tab.id)}
-                type="button"
+        {state.tabs
+          .filter((tab) => !tab.isComputer)
+          .map((tab) => {
+            const isActive = tab.id === state.activeTabId;
+            return (
+              <div
+                className={isSidebar ? "flex w-full items-center gap-1" : "flex items-end gap-1"}
+                key={tab.id}
               >
-              {tab.kind === "home" ? (
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
-                  <Sparkles className="size-3.5" />
-                </span>
-              ) : tab.kind === "agents" ? (
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-accent text-muted-foreground">
-                  <Bot className="size-3.5" />
-                </span>
-              ) : (
-                <TabIcon faviconUrl={tab.faviconUrl} kind={tab.kind} />
-              )}
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {tab.title || "New tab"}
-              </span>
-              {tab.controlledByTaskId && (
-                <span
-                  aria-label="Agent-controlled tab"
-                  className="flex size-4 items-center justify-center rounded-full bg-primary/15 text-primary"
-                  title="Agent-controlled tab"
+                <button
+                  aria-current={isActive ? "page" : undefined}
+                  className={`group browser-tab flex items-center gap-2 text-left text-[13px] transition-colors ${isSidebar ? "h-10 min-w-0 flex-1 rounded-md border px-2.5" : "h-10 min-w-48 max-w-64 mb-1 rounded-xl border border-b-0 px-3.5"} ${isActive ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"} ${tab.controlledByTaskId ? "browser-tab-agent-active" : ""}`}
+                  onClick={() => void window.groubot.browser.selectTab(tab.id)}
+                  type="button"
                 >
-                  <Bot className="size-2.5" />
-                </span>
-              )}
-              {tab.requiresUserAction && (
-                <span
-                  aria-label="Manual verification required"
-                  className="flex size-4 items-center justify-center rounded-full bg-amber-500/15 text-amber-400"
-                  title={tab.userActionMessage}
-                >
-                  <AlertTriangle className="size-2.5" />
-                </span>
-              )}
-              {tab.lastError && !tab.requiresUserAction && (
-                <span
-                  aria-label="Tab error"
-                  className="flex size-4 items-center justify-center rounded-full bg-destructive/15 text-destructive"
-                  title={tab.lastError}
-                >
-                  <AlertTriangle className="size-2.5" />
-                </span>
-              )}
-              {tab.isLoading && (
-                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary" />
-              )}
-              <span
-                aria-label={`Close ${tab.title || "tab"}`}
-                className="rounded-md px-1 text-base leading-none text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void window.groubot.browser.closeTab(tab.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void window.groubot.browser.closeTab(tab.id);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-              >
-                <X className="size-3.5" />
-              </span>
-              </button>
-            </div>
-          );
-        })}
+                  {tab.kind === "home" ? (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-md">
+                      <img
+                        alt=""
+                        className="size-5 object-contain"
+                        src={isLight ? "/logo-light.png" : "/logo-dark.png"}
+                      />
+                    </span>
+                  ) : tab.kind === "agents" ? (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-accent text-muted-foreground">
+                      <Bot className="size-3.5" />
+                    </span>
+                  ) : (
+                    <TabIcon
+                      faviconUrl={tab.faviconUrl}
+                      kind={tab.kind}
+                    />
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {tab.title || "New tab"}
+                  </span>
+                  {tab.controlledByTaskId && (
+                    <span
+                      aria-label="Agent-controlled tab"
+                      className="flex size-4 items-center justify-center rounded-full bg-primary/15 text-primary"
+                      title="Agent-controlled tab"
+                    >
+                      <Bot className="size-2.5" />
+                    </span>
+                  )}
+                  {tab.requiresUserAction && (
+                    <span
+                      aria-label="Manual verification required"
+                      className="flex size-4 items-center justify-center rounded-full bg-amber-500/15 text-amber-400"
+                      title={tab.userActionMessage}
+                    >
+                      <AlertTriangle className="size-2.5" />
+                    </span>
+                  )}
+                  {tab.lastError && !tab.requiresUserAction && (
+                    <span
+                      aria-label="Tab error"
+                      className="flex size-4 items-center justify-center rounded-full bg-destructive/15 text-destructive"
+                      title={tab.lastError}
+                    >
+                      <AlertTriangle className="size-2.5" />
+                    </span>
+                  )}
+                  {tab.isLoading && (
+                    <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary" />
+                  )}
+                  <span
+                    aria-label={`Close ${tab.title || "tab"}`}
+                    className="rounded-md px-1 text-base leading-none text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void window.groubot.browser.closeTab(tab.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void window.groubot.browser.closeTab(tab.id);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <X className="size-3.5" />
+                  </span>
+                </button>
+              </div>
+            );
+          })}
         {!isSidebar && (
           <Button
             aria-label="New tab"

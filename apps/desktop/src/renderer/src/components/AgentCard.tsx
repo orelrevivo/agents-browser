@@ -8,14 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@groubot/ui";
-import {
-  Check,
-  Copy,
-  MoreHorizontal,
-  Pencil,
-  Star,
-  Trash2,
-} from "lucide-react";
+import { Check, Copy, MoreHorizontal, Pencil, Star, Trash2 } from "lucide-react";
 import { AgentAvatar } from "./AgentAvatar";
 
 interface AgentCardProps {
@@ -26,20 +19,17 @@ interface AgentCardProps {
   onSetDefault: () => void;
 }
 
-export function AgentCard({
-  agent,
-  onDelete,
-  onDuplicate,
-  onEdit,
-  onSetDefault,
-}: AgentCardProps) {
+export function AgentCard({ agent, onDelete, onDuplicate, onEdit, onSetDefault }: AgentCardProps) {
   return (
     <Card className="overflow-hidden border-0 bg-[#fbf8f4] text-[#171717] shadow-none dark:bg-[#252321] dark:text-[#f7f3ee]">
       <CardContent className="p-0">
         <div className="relative overflow-hidden rounded-[1.35rem] border border-black/10 bg-[#f5eee8] shadow-[0_5px_14px_rgba(0,0,0,0.09)] dark:border-white/10 dark:bg-[#302d2a] dark:shadow-[0_5px_14px_rgba(0,0,0,0.2)]">
           <div className="marketplace-agent-pattern absolute inset-0 opacity-70" />
           <div className="relative flex h-52 items-end justify-center px-8 pt-5">
-            <AgentAvatar agent={agent} size="xl" />
+            <AgentAvatar
+              agent={agent}
+              size="xl"
+            />
             <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-full bg-white/85 px-3 py-1.5 text-sm font-semibold text-[#6f4941] shadow-sm backdrop-blur-sm dark:bg-black/35 dark:text-[#f1c9bc]">
               {agent.isDefault ? <Star className="size-3.5" /> : null}
               {agent.isDefault ? "Default" : "Your agent"} · {agent.name}
@@ -54,15 +44,11 @@ export function AgentCard({
           <ul className="space-y-2 text-sm leading-6">
             <li className="flex items-start gap-2">
               <Check className="mt-1 size-3.5 shrink-0 text-[#7c5b51] dark:text-[#e7ae9d]" />
-              <span>
-                {agent.description || "A companion configured for your workflow."}
-              </span>
+              <span>{agent.description || "A companion configured for your workflow."}</span>
             </li>
             <li className="flex items-start gap-2">
               <Check className="mt-1 size-3.5 shrink-0 text-[#7c5b51] dark:text-[#e7ae9d]" />
-              <span>
-                {agent.goals || "Works with your instructions and preferences."}
-              </span>
+              <span>{agent.goals || "Works with your instructions and preferences."}</span>
             </li>
           </ul>
 
@@ -78,7 +64,11 @@ export function AgentCard({
                   <MoreHorizontal className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="bottom" sideOffset={8}>
+              <DropdownMenuContent
+                align="start"
+                side="bottom"
+                sideOffset={8}
+              >
                 <DropdownMenuItem onClick={onEdit}>
                   <Pencil className="size-4" />
                   Edit agent

@@ -15,12 +15,8 @@ export const agents = sqliteTable("agents", {
   modelSettings: text("model_settings").notNull().default("{}"),
   toolPermissions: text("tool_permissions").notNull().default("{}"),
   memoryPreferences: text("memory_preferences").notNull().default("{}"),
-  isDefault: integer("is_default", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  isPinned: integer("is_pinned", { mode: "boolean" })
-    .notNull()
-    .default(false),
+  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+  isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -28,9 +24,7 @@ export const agents = sqliteTable("agents", {
 export const agentGroups = sqliteTable("agent_groups", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  allowAgentMessages: integer("allow_agent_messages", { mode: "boolean" })
-    .notNull()
-    .default(true),
+  allowAgentMessages: integer("allow_agent_messages", { mode: "boolean" }).notNull().default(true),
   pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),

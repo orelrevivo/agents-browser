@@ -15,9 +15,7 @@ export function DownloadsPage({ downloads }: DownloadsPageProps) {
           <div>
             <div className="mb-3 flex items-center gap-2 text-primary">
               <FolderDown className="size-4" />
-              <span className="text-xs font-medium uppercase tracking-[0.18em]">
-                Groubot
-              </span>
+              <span className="text-xs font-medium uppercase tracking-[0.18em]">Groubot</span>
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">Downloads</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -50,7 +48,10 @@ export function DownloadsPage({ downloads }: DownloadsPageProps) {
           ) : (
             <div className="grid gap-3">
               {downloads.map((download) => (
-                <DownloadItem download={download} key={download.id} />
+                <DownloadItem
+                  download={download}
+                  key={download.id}
+                />
               ))}
             </div>
           )}

@@ -19,11 +19,7 @@ interface SkillEditorSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreate: (input: SkillInput) => Promise<void>;
-  onImportGithub: (input: {
-    name: string;
-    description: string;
-    url: string;
-  }) => Promise<void>;
+  onImportGithub: (input: { name: string; description: string; url: string }) => Promise<void>;
 }
 
 export function SkillEditorSheet({
@@ -87,16 +83,17 @@ export function SkillEditorSheet({
       }
       onOpenChange(false);
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not save the skill.",
-      );
+      setError(cause instanceof Error ? cause.message : "Could not save the skill.");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       <SheetContent
         className="w-full min-w-0 gap-0 overflow-hidden p-0 sm:w-1/2"
         side="right"
@@ -114,10 +111,16 @@ export function SkillEditorSheet({
               onValueChange={(value) => setMode(value as "manual" | "import")}
             >
               <TabsList className="w-full">
-                <TabsTrigger className="flex-1" value="manual">
+                <TabsTrigger
+                  className="flex-1"
+                  value="manual"
+                >
                   Create manually
                 </TabsTrigger>
-                <TabsTrigger className="flex-1" value="import">
+                <TabsTrigger
+                  className="flex-1"
+                  value="import"
+                >
                   Import a skill
                 </TabsTrigger>
               </TabsList>
@@ -161,8 +164,7 @@ export function SkillEditorSheet({
                         if (!file) return;
                         setFileName(file.name);
                         const reader = new FileReader();
-                        reader.onload = () =>
-                          setContent(String(reader.result ?? ""));
+                        reader.onload = () => setContent(String(reader.result ?? ""));
                         reader.readAsText(file);
                       }}
                       ref={fileInputRef}
@@ -176,9 +178,7 @@ export function SkillEditorSheet({
                     </Button>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="github-skill-url">
-                      GitHub Markdown URL
-                    </Label>
+                    <Label htmlFor="github-skill-url">GitHub Markdown URL</Label>
                     <Input
                       id="github-skill-url"
                       onChange={(event) => setGithubUrl(event.target.value)}
@@ -186,8 +186,7 @@ export function SkillEditorSheet({
                       value={githubUrl}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Use a direct HTTPS link to a .md file in a public GitHub
-                      repository.
+                      Use a direct HTTPS link to a .md file in a public GitHub repository.
                     </p>
                   </div>
                   {content && (
@@ -202,10 +201,16 @@ export function SkillEditorSheet({
           <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card/95 px-8 py-4 backdrop-blur">
             <span className="text-xs text-destructive">{error}</span>
             <div className="ml-auto flex gap-2">
-              <Button onClick={() => onOpenChange(false)} variant="ghost">
+              <Button
+                onClick={() => onOpenChange(false)}
+                variant="ghost"
+              >
                 Cancel
               </Button>
-              <Button disabled={saving} onClick={() => void save()}>
+              <Button
+                disabled={saving}
+                onClick={() => void save()}
+              >
                 {saving ? "Saving…" : "Create skill"}
               </Button>
             </div>
@@ -216,13 +221,7 @@ export function SkillEditorSheet({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-2">
       <Label>{label}</Label>

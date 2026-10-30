@@ -17,9 +17,7 @@ export function ChatExecutionStatus({
         <Icon className="size-3.5 text-primary" />
         <span>{label}</span>
       </summary>
-      <p className="border-t border-border/60 px-3 py-2 text-[11px] leading-5">
-        {detail}
-      </p>
+      <p className="border-t border-border/60 px-3 py-2 text-[11px] leading-5">{detail}</p>
     </details>
   );
 }

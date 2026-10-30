@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   Agent,
   AgentGroup,
@@ -12,7 +12,7 @@ import type {
 } from "@groubot/db";
 import type { BrowserTabState } from "@groubot/browser/types";
 import type { Skill } from "@groubot/db";
-import { Globe2, MoreHorizontal, Pencil, Pin, PinOff } from "lucide-react";
+import { FileText, Globe2, Laptop, MoreHorizontal, Pencil, Pin, PinOff, X } from "lucide-react";
 import type { BrowserTask } from "@groubot/db";
 import {
   AlertDialog,
@@ -40,6 +40,7 @@ import { AgentAvatar } from "./AgentAvatar";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageList } from "./ChatMessageList";
 import { ChatSidebar } from "./ChatSidebar";
+import { WorkspaceFilesPanel } from "./WorkspaceFilesPanel";
 import { AgentEditorDialog } from "./AgentEditorDialog";
 import { HomeAgentStrip } from "./HomeAgentStrip";
 import { avatarColorHsl, parseCustomAvatar } from "./Customize Avatar/avatar-model";
@@ -65,9 +66,7 @@ export function ChatWorkspace({
   const [activeGroup, setActiveGroup] = useState<AgentGroup>();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [browserTabs, setBrowserTabs] = useState<BrowserTabState[]>([]);
-  const [activeConversationIds, setActiveConversationIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [activeConversationIds, setActiveConversationIds] = useState<Set<string>>(() => new Set());
   const [conversation, setConversation] = useState<ConversationWithMessages>();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [permissionMode, setPermissionMode] = useState<"ask" | "full">("ask");
@@ -84,9 +83,7 @@ export function ChatWorkspace({
   const [thinking, setThinking] = useState(false);
   const [taskActivity, setTaskActivity] = useState<BrowserTask>();
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest>();
-  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>(
-    [],
-  );
+  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
   const [replyingTo, setReplyingTo] = useState<ChatMessage>();
   const [error, setError] = useState("");
   const [renameOpen, setRenameOpen] = useState(false);
@@ -97,6 +94,151 @@ export function ChatWorkspace({
   const [customBackground, setCustomBackground] = useState<string | null>(() =>
     localStorage.getItem("groubot.customBackground"),
   );
+  const [computerOpen, setComputerOpen] = useState(false);
+  const [computerChooserOpen, setComputerChooserOpen] = useState(false);
+  const [computerMode, setComputerMode] = useState<"browser" | "files">("browser");
+  const [workspaceFolderName, setWorkspaceFolderName] = useState<string>();
+  const [computerTabId, setComputerTabId] = useState<string>();
+  const [computerConversationId, setComputerConversationId] = useState<string>();
+  const computerPanelRef = useRef<HTMLDivElement>(null);
+  const nativeComputerTab = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    return () => {
+      const tabId = nativeComputerTab.current;
+      if (!tabId || !conversationId) return;
+      nativeComputerTab.current = undefined;
+      void window.groubot.browser.closeComputer(conversationId, tabId);
+    };
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!computerConversationId || computerConversationId === conversationId) return;
+    const previousConversationId = computerConversationId;
+    const previousTabId = computerTabId;
+    if (previousTabId) {
+      void window.groubot.browser.closeComputer(previousConversationId, previousTabId);
+    }
+    setComputerOpen(false);
+    setComputerTabId(undefined);
+    setComputerConversationId(undefined);
+    nativeComputerTab.current = undefined;
+  }, [computerConversationId, computerTabId, conversationId]);
+
+  useEffect(() => {
+    if (!computerOpen || !conversationId) return;
+    const updateBounds = () => {
+      const panel = computerPanelRef.current;
+      if (!panel || !computerTabId) return;
+      const rect = panel.getBoundingClientRect();
+      const width = Math.max(1, Math.min(Math.round(rect.width), window.innerWidth));
+      const height = Math.max(1, Math.min(Math.round(rect.height), window.innerHeight));
+      if (!Number.isFinite(rect.left) || !Number.isFinite(rect.top)) return;
+      void window.groubot.browser.resizeComputer({
+        x: Math.max(0, Math.round(rect.left)),
+        y: Math.max(0, Math.round(rect.top)),
+        width,
+        height,
+      });
+    };
+    updateBounds();
+    const settleTimer = window.setTimeout(updateBounds, 220);
+    const observer = new ResizeObserver(updateBounds);
+    if (computerPanelRef.current) observer.observe(computerPanelRef.current);
+    window.addEventListener("resize", updateBounds);
+    return () => {
+      window.clearTimeout(settleTimer);
+      observer.disconnect();
+      window.removeEventListener("resize", updateBounds);
+    };
+  }, [computerOpen, computerTabId, conversationId]);
+
+  useEffect(() => {
+    if (
+      !computerOpen ||
+      !conversationId ||
+      !computerTabId ||
+      nativeComputerTab.current === computerTabId
+    )
+      return;
+    const panel = computerPanelRef.current;
+    if (!panel) {
+      console.error("[groubot.computer] panel ref unavailable; native browser was not attached", {
+        conversationId,
+        tabId: computerTabId,
+      });
+      return;
+    }
+    const rect = panel.getBoundingClientRect();
+    const savedComputerUrl = localStorage.getItem(`groubot.computer.url.${conversationId}`);
+    nativeComputerTab.current = computerTabId;
+    void window.groubot.browser
+      .openComputer(conversationId, computerTabId, savedComputerUrl || "https://www.google.com/", {
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+      })
+      .catch((error) => {
+        console.error("[groubot.computer] open failed", error);
+        nativeComputerTab.current = undefined;
+        setComputerOpen(false);
+        setComputerTabId(undefined);
+        setComputerConversationId(undefined);
+        localStorage.removeItem("groubot.computer.open");
+        localStorage.removeItem("groubot.computer.conversation");
+        localStorage.removeItem(`groubot.computer.url.${conversationId}`);
+      });
+  }, [computerOpen, computerTabId, conversationId]);
+
+  const autoOpenedComputer = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!conversationId || autoOpenedComputer.current === conversationId) return;
+    autoOpenedComputer.current = conversationId;
+    if (
+      localStorage.getItem("groubot.computer.open") === "true" &&
+      localStorage.getItem("groubot.computer.conversation") === conversationId
+    ) {
+      window.setTimeout(() => void openComputer("browser"), 0);
+    }
+  }, [conversationId]);
+
+  async function closeComputer() {
+    if (!conversationId) return;
+    if (computerTabId) {
+      await window.groubot.browser.closeComputer(conversationId, computerTabId);
+    }
+    localStorage.removeItem("groubot.computer.open");
+    localStorage.removeItem("groubot.computer.conversation");
+    setComputerChooserOpen(false);
+    setComputerOpen(false);
+    setComputerTabId(undefined);
+    setComputerConversationId(undefined);
+    nativeComputerTab.current = undefined;
+  }
+
+  async function openComputer(mode: "browser" | "files") {
+    if (!conversationId) return;
+    setComputerChooserOpen(false);
+    setComputerMode(mode);
+    setComputerConversationId(conversationId);
+    setComputerOpen(true);
+    if (mode === "files") return;
+
+    const tabId = crypto.randomUUID();
+    localStorage.setItem("groubot.computer.open", "true");
+    localStorage.setItem("groubot.computer.conversation", conversationId);
+    setComputerTabId(tabId);
+  }
+
+  function toggleComputerChooser() {
+    if (!conversationId) return;
+    if (computerOpen) {
+      void closeComputer();
+      return;
+    }
+    setComputerChooserOpen((open) => !open);
+  }
 
   useEffect(() => {
     function handleBackgroundChange() {
@@ -117,10 +259,7 @@ export function ChatWorkspace({
   }, []);
 
   const selectedAgent = useMemo(
-    () =>
-      agents.find(
-        (agent) => agent.id === (conversation?.agentId ?? selectedAgentId),
-      ),
+    () => agents.find((agent) => agent.id === (conversation?.agentId ?? selectedAgentId)),
     [agents, conversation?.agentId, selectedAgentId],
   );
 
@@ -157,13 +296,11 @@ export function ChatWorkspace({
   useEffect(() => {
     const handleConversationsChanged = () => void refreshConversations();
     window.addEventListener("groubot:conversations-changed", handleConversationsChanged);
-    return () => window.removeEventListener("groubot:conversations-changed", handleConversationsChanged);
+    return () =>
+      window.removeEventListener("groubot:conversations-changed", handleConversationsChanged);
   }, []);
 
-  async function loadConversation(
-    id?: string,
-    options: { clearError?: boolean } = {},
-  ) {
+  async function loadConversation(id?: string, options: { clearError?: boolean } = {}) {
     if (options.clearError !== false) setError("");
     if (!id) {
       setConversation(undefined);
@@ -177,10 +314,7 @@ export function ChatWorkspace({
       setConversation(result);
       if (result)
         setOptimisticMessages((current) =>
-          current.filter(
-            (message) =>
-              !result.messages.some((saved) => saved.id === message.id),
-          ),
+          current.filter((message) => !result.messages.some((saved) => saved.id === message.id)),
         );
     } catch {
       setConversation(undefined);
@@ -205,27 +339,22 @@ export function ChatWorkspace({
       setBrowserTabs(browserState.tabs);
       if (!conversationId)
         setSelectedAgentId(
-          availableAgents.find((agent) => agent.isDefault)?.id ??
-          availableAgents[0]?.id ??
-          null,
+          availableAgents.find((agent) => agent.isDefault)?.id ?? availableAgents[0]?.id ?? null,
         );
     });
   }, [conversationId]);
 
-  useEffect(
-    () =>
-      window.groubot.browser.onStateChanged((next) =>
-        setBrowserTabs(next.tabs),
-      ),
-    [],
-  );
+  useEffect(() => window.groubot.browser.onStateChanged((next) => setBrowserTabs(next.tabs)), []);
 
   useEffect(() => {
     let mounted = true;
     const refreshActiveRuns = async () => {
       try {
         const runs = await window.groubot.chats.active();
-        if (mounted) setActiveConversationIds(new Set(runs.filter((run) => !run.done).map((run) => run.conversationId)));
+        if (mounted)
+          setActiveConversationIds(
+            new Set(runs.filter((run) => !run.done).map((run) => run.conversationId)),
+          );
       } catch {
         /* The backend may still be starting. */
       }
@@ -274,9 +403,7 @@ export function ChatWorkspace({
             setToolActivity(undefined);
           } else {
             setToolActivity(
-              event.status === "started"
-                ? formatToolActivity(event.toolName)
-                : undefined,
+              event.status === "started" ? formatToolActivity(event.toolName) : undefined,
             );
           }
           setThinking(false);
@@ -303,10 +430,7 @@ export function ChatWorkspace({
               if (task) setTaskActivity(task);
             });
           setError("");
-          void Promise.all([
-            loadConversation(event.conversationId),
-            refreshConversations(),
-          ]);
+          void Promise.all([loadConversation(event.conversationId), refreshConversations()]);
         } else if (event.type === "cancelled") {
           setStreaming(false);
           setActiveRequestId(undefined);
@@ -328,9 +452,7 @@ export function ChatWorkspace({
             void window.groubot.browserTasks.get(event.taskId).then((task) => {
               if (task) setTaskActivity(task);
             });
-          setError(
-            event.message ?? "The agent could not complete this response.",
-          );
+          setError(event.message ?? "The agent could not complete this response.");
           void loadConversation(event.conversationId, { clearError: false });
         } else if (event.type === "waiting_for_human") {
           setStreaming(false);
@@ -351,9 +473,7 @@ export function ChatWorkspace({
   useEffect(
     () =>
       window.groubot.chats.onApprovalRequest((request) => {
-        setToolActivity(
-          `Waiting for permission: ${formatToolActivity(request.toolName)}`,
-        );
+        setToolActivity(`Waiting for permission: ${formatToolActivity(request.toolName)}`);
         setStreaming(true);
       }),
     [],
@@ -366,9 +486,11 @@ export function ChatWorkspace({
     }
 
     const localMessageId = crypto.randomUUID();
-    const outgoingMetadata = metadata ?? (replyingTo
-      ? ({ type: "reply", replyTo: toMessageReference(replyingTo) } satisfies ChatMessageMetadata)
-      : undefined);
+    const outgoingMetadata =
+      metadata ??
+      (replyingTo
+        ? ({ type: "reply", replyTo: toMessageReference(replyingTo) } satisfies ChatMessageMetadata)
+        : undefined);
     const optimisticMessage: ChatMessage = {
       id: localMessageId,
       conversationId: conversation?.id ?? "pending",
@@ -388,16 +510,10 @@ export function ChatWorkspace({
     setError("");
     try {
       if (!conversation) {
-        const created = await window.groubot.chats.create(
-          selectedAgentId,
-          null,
-          permissionMode,
-        );
+        const created = await window.groubot.chats.create(selectedAgentId, null, permissionMode);
         setOptimisticMessages((current) =>
           current.map((message) =>
-            message.id === localMessageId
-              ? { ...message, conversationId: created.id }
-              : message,
+            message.id === localMessageId ? { ...message, conversationId: created.id } : message,
           ),
         );
         await window.groubot.browser.navigate(`groubot://chat/${created.id}`);
@@ -411,9 +527,7 @@ export function ChatWorkspace({
             if (task) setTaskActivity(task);
           });
         setOptimisticMessages((current) =>
-          current.map((message) =>
-            message.id === localMessageId ? started.message : message,
-          ),
+          current.map((message) => (message.id === localMessageId ? started.message : message)),
         );
         setActiveRequestId(started.requestId);
         setStreaming(true);
@@ -432,9 +546,7 @@ export function ChatWorkspace({
           if (task) setTaskActivity(task);
         });
       setOptimisticMessages((current) =>
-        current.map((message) =>
-          message.id === localMessageId ? started.message : message,
-        ),
+        current.map((message) => (message.id === localMessageId ? started.message : message)),
       );
       setActiveRequestId(started.requestId);
       setStreaming(true);
@@ -444,9 +556,7 @@ export function ChatWorkspace({
     } catch (cause) {
       setStreaming(false);
       setToolActivity(undefined);
-      setError(
-        cause instanceof Error ? cause.message : "Unable to save this message.",
-      );
+      setError(cause instanceof Error ? cause.message : "Unable to save this message.");
       return false;
     } finally {
       setBusy(false);
@@ -467,10 +577,7 @@ export function ChatWorkspace({
     });
   }
 
-  async function updateMessageMetadata(
-    message: ChatMessage,
-    metadata: ChatMessageMetadata,
-  ) {
+  async function updateMessageMetadata(message: ChatMessage, metadata: ChatMessageMetadata) {
     const updated = await window.groubot.chats.updateMessageMetadata({
       conversationId: message.conversationId,
       messageId: message.id,
@@ -479,11 +586,9 @@ export function ChatWorkspace({
     setConversation((current) =>
       current
         ? {
-          ...current,
-          messages: current.messages.map((item) =>
-            item.id === updated.id ? updated : item,
-          ),
-        }
+            ...current,
+            messages: current.messages.map((item) => (item.id === updated.id ? updated : item)),
+          }
         : current,
     );
     return updated;
@@ -493,10 +598,10 @@ export function ChatWorkspace({
     const current = message.metadata;
     const reactions = { ...(current?.reactions ?? {}) };
     reactions[emoji] = (reactions[emoji] ?? 0) + 1;
-    await updateMessageMetadata(
-      message,
-      ({ ...(current ?? { type: "message" }), reactions } as ChatMessageMetadata),
-    );
+    await updateMessageMetadata(message, {
+      ...(current ?? { type: "message" }),
+      reactions,
+    } as ChatMessageMetadata);
   }
 
   async function newChat() {
@@ -517,11 +622,7 @@ export function ChatWorkspace({
       );
     } catch (cause) {
       setPermissionMode(conversation.permissionMode);
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to save browser permissions.",
-      );
+      setError(cause instanceof Error ? cause.message : "Unable to save browser permissions.");
     }
   }
 
@@ -570,9 +671,7 @@ export function ChatWorkspace({
 
   async function setAgentPinned(id: string, pinned: boolean) {
     const updated = await window.groubot.agents.setPinned(id, pinned);
-    setAgents((current) =>
-      current.map((agent) => (agent.id === updated.id ? updated : agent)),
-    );
+    setAgents((current) => current.map((agent) => (agent.id === updated.id ? updated : agent)));
   }
   async function saveConversationName() {
     if (!conversation || !renameValue.trim()) return;
@@ -586,9 +685,7 @@ export function ChatWorkspace({
     if (!taskActivity) return;
     const result = await window.groubot.browserTasks.resume(taskActivity.id);
     if (!result.resumed) {
-      setError(
-        result.reason ?? "Complete the human verification before continuing.",
-      );
+      setError(result.reason ?? "Complete the human verification before continuing.");
       const task = await window.groubot.browserTasks.get(taskActivity.id);
       if (task) setTaskActivity(task);
     } else {
@@ -598,9 +695,7 @@ export function ChatWorkspace({
   }
 
   const title = conversation?.title ?? "New chat";
-  const isConversation = Boolean(
-    (conversationId && conversation) || optimisticMessages.length,
-  );
+  const isConversation = Boolean((conversationId && conversation) || optimisticMessages.length);
   return (
     <>
       <div className="flex h-full min-h-0 bg-background dark:bg-[#161616]">
@@ -616,18 +711,10 @@ export function ChatWorkspace({
           onPin={setChatPinned}
           onAgentPin={setAgentPinned}
           onRename={renameChat}
-          onSkills={() =>
-            void window.groubot.browser.navigate("groubot://skills")
-          }
-          onMarketplace={() =>
-            void window.groubot.browser.navigate("groubot://marketplace")
-          }
-          onNewGroup={() =>
-            window.dispatchEvent(new Event("groubot:new-group"))
-          }
-          onAutomation={() =>
-            window.dispatchEvent(new Event("groubot:automation"))
-          }
+          onSkills={() => void window.groubot.browser.navigate("groubot://skills")}
+          onMarketplace={() => void window.groubot.browser.navigate("groubot://marketplace")}
+          onNewGroup={() => window.dispatchEvent(new Event("groubot:new-group"))}
+          onAutomation={() => window.dispatchEvent(new Event("groubot:automation"))}
           onSelect={selectChat}
           onToggle={() => setSidebarCollapsed((value) => !value)}
         />
@@ -641,7 +728,7 @@ export function ChatWorkspace({
             />
           )}
           {isConversation && (
-            <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/40 px-3.5">
+            <header className="relative flex h-14 shrink-0 items-center justify-between border-b border-border/40 px-3.5">
               <div className="flex min-w-0 items-center gap-2">
                 {activeGroup ? (
                   <div className="flex items-center -space-x-2">
@@ -649,121 +736,212 @@ export function ChatWorkspace({
                       .filter((agent) => activeGroup.agentIds.includes(agent.id))
                       .slice(0, 3)
                       .map((agent) => (
-                        <div className="rounded-full border-2 border-background" key={agent.id}>
-                          <AgentAvatar agent={agent} size="sm" status={activeConversationIds.has(conversationId ?? "") ? "working" : undefined} />
+                        <div
+                          className="rounded-full border-2 border-background"
+                          key={agent.id}
+                        >
+                          <AgentAvatar
+                            agent={agent}
+                            size="sm"
+                            status={
+                              activeConversationIds.has(conversationId ?? "")
+                                ? "working"
+                                : undefined
+                            }
+                          />
                         </div>
                       ))}
                   </div>
                 ) : (
-                  <AgentAvatar agent={selectedAgent} size="sm" status={activeConversationIds.has(conversationId ?? "") ? "working" : undefined} />
+                  <AgentAvatar
+                    agent={selectedAgent}
+                    size="sm"
+                    status={activeConversationIds.has(conversationId ?? "") ? "working" : undefined}
+                  />
                 )}
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{title}</p>
                   <p className="text-[10px] text-muted-foreground">
                     {activeGroup
                       ? `${activeGroup.agentIds.length} group members`
-                      : selectedAgent?.name ?? "Agent unavailable"}
+                      : (selectedAgent?.name ?? "Agent unavailable")}
                   </p>
                 </div>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    aria-label="Chat options"
-                    className="size-8"
-                    size="icon"
-                    variant="ghost"
+              <div className="flex items-center gap-1">
+                <Button
+                  aria-label={computerOpen ? "Close computer" : "Choose computer tool"}
+                  className={
+                    computerOpen || computerChooserOpen
+                      ? "size-8 bg-primary/15 text-primary"
+                      : "size-8"
+                  }
+                  onClick={toggleComputerChooser}
+                  size="icon"
+                  variant="ghost"
+                  title={computerOpen ? "Close computer" : "Choose Browser or Files"}
+                >
+                  {computerOpen ? <X className="size-4" /> : <Laptop className="size-4" />}
+                </Button>
+                {computerChooserOpen && !computerOpen && (
+                  <div className="absolute right-12 top-11 z-40 flex w-40 flex-col gap-1 rounded-lg border border-border bg-popover p-1.5 shadow-xl">
+                    <button
+                      className="flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-accent"
+                      onClick={() => void openComputer("browser")}
+                      type="button"
+                    >
+                      <Globe2 className="size-3.5 shrink-0 text-muted-foreground" />
+                      Browser
+                    </button>
+                    <button
+                      aria-disabled="true"
+                      className="flex cursor-not-allowed items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-muted-foreground/60"
+                      onClick={(event) => event.preventDefault()}
+                      type="button"
+                    >
+                      <FileText className="size-3.5 shrink-0" />
+                      <span className="min-w-0 flex-1">Files</span>
+                      <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[9px] leading-none text-muted-foreground">
+                        Coming Soon
+                      </span>
+                    </button>
+                  </div>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      aria-label="Chat options"
+                      className="size-8"
+                      size="icon"
+                      variant="ghost"
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    side="bottom"
+                    sideOffset={8}
                   >
-                    <MoreHorizontal className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" side="bottom" sideOffset={8}>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setRenameValue(title);
-                      setRenameOpen(true);
-                    }}
-                  >
-                    Rename Chat
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void togglePinChat()}>
-                    {conversation?.pinned ? (
-                      <PinOff className="size-4" />
-                    ) : (
-                      <Pin className="size-4" />
-                    )}
-                    {conversation?.pinned ? "Unpin Chat" : "Pin Chat"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => {
-                      if (conversation) void deleteChat(conversation.id);
-                    }}
-                  >
-                    Delete Chat
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setRenameValue(title);
+                        setRenameOpen(true);
+                      }}
+                    >
+                      Rename Chat
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void togglePinChat()}>
+                      {conversation?.pinned ? (
+                        <PinOff className="size-4" />
+                      ) : (
+                        <Pin className="size-4" />
+                      )}
+                      {conversation?.pinned ? "Unpin Chat" : "Pin Chat"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => {
+                        if (conversation) void deleteChat(conversation.id);
+                      }}
+                    >
+                      Delete Chat
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </header>
           )}
-          {error && (
-            <div className="mx-auto mt-4 w-[calc(100%-2rem)] max-w-3xl rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-          {!conversationId && (
-            <HomeAgentStrip
-              agents={agents}
-              onAdd={openCreateAgent}
-              onSelect={setSelectedAgentId}
-              selectedAgentId={selectedAgentId}
-            />
-          )}
-          {taskActivity && (
-            <div className="mx-auto mt-3 flex w-[calc(100%-2rem)] max-w-3xl items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-left transition hover:bg-primary/10">
-              <button
-                className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                onClick={() => {
-                  const tabId = taskActivity.tabIds.at(-1);
-                  if (tabId) void window.groubot.browser.selectTab(tabId);
-                }}
-                type="button"
+          <div
+            className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${computerOpen && conversationId ? "pr-[min(46vw,42rem)]" : ""}`}
+          >
+            {computerOpen && conversationId && computerConversationId === conversationId && (
+              <div
+                ref={computerPanelRef}
+                className={`absolute inset-y-0 right-0 z-20 w-[min(46vw,42rem)] border-l border-border bg-transparent shadow-2xl transition-[width,transform] duration-300 ease-out ${computerMode === "files" ? "pointer-events-auto" : "pointer-events-none"}`}
+                aria-label="Computer browser"
               >
-                <Globe2 className="size-4 shrink-0 text-primary" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-medium">
-                    {taskActivity.currentStep}
-                  </span>
-                  <span className="block truncate text-[10px] text-muted-foreground">
-                    {taskActivity.title}
-                  </span>
-                </span>
-                <span className="text-[10px] capitalize text-muted-foreground">
-                  {taskActivity.status.replaceAll("_", " ")}
-                </span>
-              </button>
-              {taskActivity.status === "waiting_for_human" && (
-                <Button
-                  className="h-7 shrink-0 px-2 text-[11px]"
-                  onClick={() => void resumeHumanTask()}
-                  size="sm"
-                >
-                  Continue
-                </Button>
-              )}
-            </div>
-          )}
-          {conversationId ? (
-            loading && !optimisticMessages.length ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                Loading conversation…
+                {computerMode === "files" && (
+                  <WorkspaceFilesPanel
+                    initialFolderName={workspaceFolderName}
+                    onClose={() => setComputerMode("browser")}
+                  />
+                )}
               </div>
-            ) : conversation || optimisticMessages.length ? (
+            )}
+            {error && (
+              <div className="mx-auto mt-4 w-[calc(100%-2rem)] max-w-3xl rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+            {!conversationId && (
+              <HomeAgentStrip
+                agents={agents}
+                onAdd={openCreateAgent}
+                onSelect={setSelectedAgentId}
+                selectedAgentId={selectedAgentId}
+              />
+            )}
+            {taskActivity && (
+              <div className="mx-auto mt-3 flex w-[calc(100%-2rem)] max-w-3xl items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-left transition hover:bg-primary/10">
+                <button
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  onClick={() => {
+                    const tabId = taskActivity.tabIds.at(-1);
+                    if (tabId) void window.groubot.browser.selectTab(tabId);
+                  }}
+                  type="button"
+                >
+                  <Globe2 className="size-4 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium">
+                      {taskActivity.currentStep}
+                    </span>
+                    <span className="block truncate text-[10px] text-muted-foreground">
+                      {taskActivity.title}
+                    </span>
+                  </span>
+                  <span className="text-[10px] capitalize text-muted-foreground">
+                    {taskActivity.status.replaceAll("_", " ")}
+                  </span>
+                </button>
+                {taskActivity.status === "waiting_for_human" && (
+                  <Button
+                    className="h-7 shrink-0 px-2 text-[11px]"
+                    onClick={() => void resumeHumanTask()}
+                    size="sm"
+                  >
+                    Continue
+                  </Button>
+                )}
+              </div>
+            )}
+            {conversationId ? (
+              loading && !optimisticMessages.length ? (
+                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                  Loading conversation…
+                </div>
+              ) : conversation || optimisticMessages.length ? (
+                <ChatMessageList
+                  agent={selectedAgent}
+                  agents={agents}
+                  messages={visibleMessages}
+                  streaming={streaming || activeConversationIds.has(conversationId)}
+                  streamingText={streamingText}
+                  skillActivity={skillActivity}
+                  toolActivity={toolActivity}
+                  thinking={thinking}
+                  onQuestionAnswer={submitQuestion}
+                  onReply={setReplyingTo}
+                  onReaction={addReaction}
+                />
+              ) : null
+            ) : optimisticMessages.length ? (
               <ChatMessageList
                 agent={selectedAgent}
                 agents={agents}
                 messages={visibleMessages}
-                streaming={streaming || activeConversationIds.has(conversationId)}
+                streaming={streaming || activeConversationIds.has(conversationId ?? "")}
                 streamingText={streamingText}
                 skillActivity={skillActivity}
                 toolActivity={toolActivity}
@@ -772,56 +950,47 @@ export function ChatWorkspace({
                 onReply={setReplyingTo}
                 onReaction={addReaction}
               />
-            ) : null
-          ) : optimisticMessages.length ? (
-            <ChatMessageList
-              agent={selectedAgent}
-              agents={agents}
-              messages={visibleMessages}
-              streaming={streaming || activeConversationIds.has(conversationId ?? "")}
-              streamingText={streamingText}
-              skillActivity={skillActivity}
-              toolActivity={toolActivity}
-              thinking={thinking}
-              onQuestionAnswer={submitQuestion}
-              onReply={setReplyingTo}
-              onReaction={addReaction}
-            />
-          ) : null}
-          <div
-            className={`chat-composer-shell ${isConversation ? "chat-composer-shell-conversation" : "chat-composer-shell-home"}`}
-          >
-            {!isConversation && (
-              <div className="chat-home-agent">
-                <EmptyChatState
-                  agent={selectedAgent}
-                  onEdit={openEditAgent}
-                  onCreate={openCreateAgent}
+            ) : null}
+            <div
+              className={`chat-composer-shell ${isConversation ? "chat-composer-shell-conversation" : "chat-composer-shell-home"}`}
+              style={computerOpen && conversationId ? { right: "min(46vw, 42rem)" } : undefined}
+            >
+              {!isConversation && (
+                <div className="chat-home-agent">
+                  <EmptyChatState
+                    agent={selectedAgent}
+                    onEdit={openEditAgent}
+                    onCreate={openCreateAgent}
+                  />
+                </div>
+              )}
+              <div className={!isConversation ? "chat-home-composer" : undefined}>
+                <ChatComposer
+                  busy={busy || streaming}
+                  canSend={Boolean(conversation?.agentId ?? selectedAgentId)}
+                  compact={!isConversation}
+                  onCancel={cancel}
+                  onClearReply={() => setReplyingTo(undefined)}
+                  onFolderSelect={setWorkspaceFolderName}
+                  onSubmit={async (content) => {
+                    await send(content);
+                  }}
+                  onPermissionModeChange={changePermissionMode}
+                  permissionMode={permissionMode}
+                  replyingTo={replyingTo}
+                  selectedAgentName={selectedAgent?.name}
+                  skills={skills}
+                  tabs={browserTabs}
                 />
               </div>
-            )}
-            <div className={!isConversation ? "chat-home-composer" : undefined}>
-              <ChatComposer
-                busy={busy || streaming}
-                canSend={Boolean(conversation?.agentId ?? selectedAgentId)}
-                compact={!isConversation}
-                onCancel={cancel}
-                onClearReply={() => setReplyingTo(undefined)}
-                onSubmit={async (content) => {
-                  await send(content);
-                }}
-                onPermissionModeChange={changePermissionMode}
-                permissionMode={permissionMode}
-                replyingTo={replyingTo}
-                selectedAgentName={selectedAgent?.name}
-                skills={skills}
-                tabs={browserTabs}
-              />
             </div>
           </div>
         </section>
       </div>
-      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+      <Dialog
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rename Chat</DialogTitle>
@@ -835,7 +1004,10 @@ export function ChatWorkspace({
             value={renameValue}
           />
           <DialogFooter>
-            <Button onClick={() => setRenameOpen(false)} variant="ghost">
+            <Button
+              onClick={() => setRenameOpen(false)}
+              variant="ghost"
+            >
               Cancel
             </Button>
             <Button
@@ -851,10 +1023,7 @@ export function ChatWorkspace({
         open={Boolean(approvalRequest)}
         onOpenChange={(open) => {
           if (!open && approvalRequest) {
-            void window.groubot.chats.respondToApproval(
-              approvalRequest.approvalId,
-              false,
-            );
+            void window.groubot.chats.respondToApproval(approvalRequest.approvalId, false);
             setApprovalRequest(undefined);
           }
         }}
@@ -868,12 +1037,8 @@ export function ChatWorkspace({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {approvalRequest?.toolName}
-            </span>
-            {approvalRequest?.input.selector
-              ? ` · ${String(approvalRequest.input.selector)}`
-              : ""}
+            <span className="font-medium text-foreground">{approvalRequest?.toolName}</span>
+            {approvalRequest?.input.selector ? ` · ${String(approvalRequest.input.selector)}` : ""}
             {typeof approvalRequest?.input.textLength === "number"
               ? ` · ${approvalRequest.input.textLength} characters`
               : ""}
@@ -882,10 +1047,7 @@ export function ChatWorkspace({
             <AlertDialogCancel
               onClick={() => {
                 if (approvalRequest)
-                  void window.groubot.chats.respondToApproval(
-                    approvalRequest.approvalId,
-                    false,
-                  );
+                  void window.groubot.chats.respondToApproval(approvalRequest.approvalId, false);
                 setApprovalRequest(undefined);
               }}
             >
@@ -894,10 +1056,7 @@ export function ChatWorkspace({
             <AlertDialogAction
               onClick={() => {
                 if (approvalRequest)
-                  void window.groubot.chats.respondToApproval(
-                    approvalRequest.approvalId,
-                    true,
-                  );
+                  void window.groubot.chats.respondToApproval(approvalRequest.approvalId, true);
                 setApprovalRequest(undefined);
               }}
             >
@@ -918,12 +1077,8 @@ export function ChatWorkspace({
 
 function mergeMessages(saved: ChatMessage[], optimistic: ChatMessage[]) {
   const savedIds = new Set(saved.map((message) => message.id));
-  return [
-    ...saved,
-    ...optimistic.filter((message) => !savedIds.has(message.id)),
-  ].sort(
-    (left, right) =>
-      new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  return [...saved, ...optimistic.filter((message) => !savedIds.has(message.id))].sort(
+    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
   );
 }
 
@@ -968,7 +1123,10 @@ function EmptyChatState({
     <div className="flex w-full flex-col items-center gap-1 px-6 text-center">
       {agent ? (
         <div className="flex flex-col items-center gap-2">
-          <AgentAvatar agent={agent} size="xl" />
+          <AgentAvatar
+            agent={agent}
+            size="xl"
+          />
           <Button
             aria-label={`Edit ${agent.name}`}
             className="size-6"

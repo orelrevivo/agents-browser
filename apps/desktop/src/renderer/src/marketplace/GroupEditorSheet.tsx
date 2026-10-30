@@ -41,7 +41,10 @@ export function GroupEditorSheet({
   }
 
   return (
-    <Sheet onOpenChange={onOpenChange} open={open}>
+    <Sheet
+      onOpenChange={onOpenChange}
+      open={open}
+    >
       <SheetContent className="w-full sm:max-w-lg">
         <div className="px-6 pt-6">
           <SheetTitle>Create agent group</SheetTitle>
@@ -62,9 +65,7 @@ export function GroupEditorSheet({
           <div className="grid gap-3">
             <div>
               <Label>Members</Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Select at least two agents.
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Select at least two agents.</p>
             </div>
             <div className="grid gap-2">
               {agents.map((agent) => (
@@ -76,9 +77,7 @@ export function GroupEditorSheet({
                     checked={selected.includes(agent.id)}
                     onCheckedChange={(checked) =>
                       setSelected((current) =>
-                        checked
-                          ? [...current, agent.id]
-                          : current.filter((id) => id !== agent.id),
+                        checked ? [...current, agent.id] : current.filter((id) => id !== agent.id),
                       )
                     }
                   />

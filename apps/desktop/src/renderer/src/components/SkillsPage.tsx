@@ -40,11 +40,7 @@ export function SkillsPage() {
 
   useEffect(() => {
     void refresh()
-      .catch((cause) =>
-        setError(
-          cause instanceof Error ? cause.message : "Could not load skills.",
-        ),
-      )
+      .catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load skills."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -53,11 +49,7 @@ export function SkillsPage() {
     await refresh();
   }
 
-  async function importGithub(input: {
-    name: string;
-    description: string;
-    url: string;
-  }) {
+  async function importGithub(input: { name: string; description: string; url: string }) {
     await window.groubot.skills.importGithub(input);
     await refresh();
   }
@@ -94,16 +86,10 @@ export function SkillsPage() {
           await window.groubot.chats.rename({ id, title });
           await refresh();
         }}
-        onSelect={(id) =>
-          void window.groubot.browser.navigate(`groubot://chat/${id}`)
-        }
+        onSelect={(id) => void window.groubot.browser.navigate(`groubot://chat/${id}`)}
         onSkills={() => undefined}
-        onMarketplace={() =>
-          void window.groubot.browser.navigate("groubot://marketplace")
-        }
-        onNewGroup={() =>
-          window.dispatchEvent(new Event("groubot:new-group"))
-        }
+        onMarketplace={() => void window.groubot.browser.navigate("groubot://marketplace")}
+        onNewGroup={() => window.dispatchEvent(new Event("groubot:new-group"))}
         onToggle={() => setSidebarCollapsed((value) => !value)}
       />
       <main className="min-w-0 flex-1 overflow-auto">
@@ -115,7 +101,10 @@ export function SkillsPage() {
                 Create and Manage Reusable Interactions for Your Agents.
               </p>
             </div>
-            <Button onClick={() => setEditorOpen(true)} className="bg-primary/20">
+            <Button
+              onClick={() => setEditorOpen(true)}
+              className="bg-primary/20"
+            >
               <Plus className="size-4" /> Create skill
             </Button>
           </header>
@@ -144,7 +133,10 @@ export function SkillsPage() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   Create a reusable interaction for your agents.
                 </p>
-                <Button className="mt-5 bg-primary/20" onClick={() => setEditorOpen(true)}>
+                <Button
+                  className="mt-5 bg-primary/20"
+                  onClick={() => setEditorOpen(true)}
+                >
                   <Plus className="size-4" /> Create skill
                 </Button>
               </div>

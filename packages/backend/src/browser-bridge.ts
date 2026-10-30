@@ -11,7 +11,10 @@ export type BrowserRequestOperation =
   | "capture_screenshot"
   | "click_element"
   | "type_text"
-  | "scroll_page";
+  | "scroll_page"
+  | "workspace_list_files"
+  | "workspace_read_file"
+  | "workspace_write_file";
 
 interface PendingRequest {
   operation: BrowserRequestOperation;
@@ -30,6 +33,7 @@ export class BrowserRequestBridge {
   private readonly claims = new Map<string, number>();
   private readonly approvals = new Map<string, PendingApproval>();
   private latestState: unknown[] = [];
+  private readonly computerTabs = new Map<string, string>();
 
   enqueue(
     operation: BrowserRequestOperation,
@@ -77,12 +81,7 @@ export class BrowserRequestBridge {
     return requests;
   }
 
-  complete(
-    requestId: string,
-    ok: boolean,
-    result?: unknown,
-    error?: string,
-  ): boolean {
+  complete(requestId: string, ok: boolean, result?: unknown, error?: string): boolean {
     const request = this.pending.get(requestId);
     if (!request) return false;
     clearTimeout(request.timer);
@@ -121,19 +120,39 @@ export class BrowserRequestBridge {
 
   setState(tabs: unknown[]): void {
     this.latestState = tabs;
+    const liveTabIds = new Set(
+      tabs.flatMap((tab) =>
+        tab && typeof tab === "object" && typeof (tab as { id?: unknown }).id === "string"
+          ? [(tab as { id: string }).id]
+          : [],
+      ),
+    );
+    // A renderer restart starts with a fresh native tab set. Do not let a
+    // previous Computer association make the agent report “already open”
+    // when that native surface no longer exists.
+    for (const [conversationId, tabId] of this.computerTabs) {
+      if (!liveTabIds.has(tabId)) this.computerTabs.delete(conversationId);
+    }
   }
   state(): unknown[] {
     return this.latestState;
   }
+  setComputerTab(conversationId: string, tabId: string | null): void {
+    if (tabId) this.computerTabs.set(conversationId, tabId);
+    else this.computerTabs.delete(conversationId);
+  }
+  computerTab(conversationId?: string): string | undefined {
+    return conversationId ? this.computerTabs.get(conversationId) : undefined;
+  }
   rejectAll(reason = "Browser bridge disconnected."): void {
-    for (const id of [...this.pending.keys()])
-      this.complete(id, false, undefined, reason);
+    for (const id of [...this.pending.keys()]) this.complete(id, false, undefined, reason);
     for (const approval of this.approvals.values()) {
       clearTimeout(approval.timer);
       approval.resolve(false);
     }
     this.approvals.clear();
     this.claims.clear();
+    this.computerTabs.clear();
   }
 }
 

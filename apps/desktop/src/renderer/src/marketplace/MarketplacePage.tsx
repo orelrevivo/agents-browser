@@ -4,10 +4,7 @@ import { Button, Skeleton } from "@groubot/ui";
 import { Plus, Store } from "lucide-react";
 import { ChatSidebar } from "../components/ChatSidebar";
 import { MarketplaceAgentCard } from "./MarketplaceAgentCard";
-import {
-  marketplaceAgents,
-  toAgentInput,
-} from "./marketplace-agents";
+import { marketplaceAgents, toAgentInput } from "./marketplace-agents";
 
 export function MarketplacePage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -32,11 +29,7 @@ export function MarketplacePage() {
   useEffect(() => {
     void refresh()
       .catch((cause) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Could not load marketplace.",
-        ),
+        setError(cause instanceof Error ? cause.message : "Could not load marketplace."),
       )
       .finally(() => setLoading(false));
   }, []);
@@ -44,17 +37,12 @@ export function MarketplacePage() {
   useEffect(() => {
     function handleGroupsChanged() {
       void refresh().catch((cause) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Could not refresh agent groups.",
-        ),
+        setError(cause instanceof Error ? cause.message : "Could not refresh agent groups."),
       );
     }
 
     window.addEventListener("groubot:groups-changed", handleGroupsChanged);
-    return () =>
-      window.removeEventListener("groubot:groups-changed", handleGroupsChanged);
+    return () => window.removeEventListener("groubot:groups-changed", handleGroupsChanged);
   }, []);
 
   const hiredNames = useMemo(
@@ -71,9 +59,7 @@ export function MarketplacePage() {
       await window.groubot.agents.create(toAgentInput(definition));
       await refresh();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not hire agent.",
-      );
+      setError(cause instanceof Error ? cause.message : "Could not hire agent.");
     } finally {
       setHiring(undefined);
     }
@@ -93,9 +79,7 @@ export function MarketplacePage() {
         }}
         onMarketplace={() => undefined}
         onNew={() => void window.groubot.browser.navigate("groubot://")}
-        onNewGroup={() =>
-          window.dispatchEvent(new Event("groubot:new-group"))
-        }
+        onNewGroup={() => window.dispatchEvent(new Event("groubot:new-group"))}
         onPin={async (id, pinned) => {
           await window.groubot.chats.setPinned({ id, pinned });
           await refresh();
@@ -108,23 +92,17 @@ export function MarketplacePage() {
           await window.groubot.chats.rename({ id, title });
           await refresh();
         }}
-        onSelect={(id) =>
-          void window.groubot.browser.navigate(`groubot://chat/${id}`)
-        }
-        onSkills={() =>
-          void window.groubot.browser.navigate("groubot://skills")
-        }
+        onSelect={(id) => void window.groubot.browser.navigate(`groubot://chat/${id}`)}
+        onSkills={() => void window.groubot.browser.navigate("groubot://skills")}
         onToggle={() => setSidebarCollapsed((value) => !value)}
       />
       <main className="min-w-0 flex-1 overflow-auto bg-background">
         <div className="mx-auto w-full max-w-5xl px-6 py-8 sm:px-10">
           <header className="flex flex-col gap-2 border-b border-border pb-6">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              Marketplace Agents
-            </h1>
+            <h1 className="text-3xl font-semibold tracking-tight">Marketplace Agents</h1>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Hire focused companions for sales, support, development,
-              research, marketing, and operations.
+              Hire focused companions for sales, support, development, research, marketing, and
+              operations.
             </p>
           </header>
 
@@ -137,9 +115,7 @@ export function MarketplacePage() {
                 </p>
               </div>
               <Button
-                onClick={() =>
-                  window.dispatchEvent(new Event("groubot:new-group"))
-                }
+                onClick={() => window.dispatchEvent(new Event("groubot:new-group"))}
                 size="sm"
               >
                 <Plus className="size-4" /> New group
@@ -148,10 +124,14 @@ export function MarketplacePage() {
             {groups.length > 0 && (
               <div className="grid gap-4 sm:grid-cols-2">
                 {groups.map((group) => (
-                  <div className="rounded-2xl border border-border bg-card p-4" key={group.id}>
+                  <div
+                    className="rounded-2xl border border-border bg-card p-4"
+                    key={group.id}
+                  >
                     <p className="font-medium">{group.name}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {group.agentIds.length} agents · {group.allowAgentMessages ? "Members can post" : "Owner only"}
+                      {group.agentIds.length} agents ·{" "}
+                      {group.allowAgentMessages ? "Members can post" : "Owner only"}
                     </p>
                   </div>
                 ))}
@@ -168,7 +148,10 @@ export function MarketplacePage() {
           {loading ? (
             <div className="mt-8 grid gap-6 xl:grid-cols-2">
               {marketplaceAgents.map((agent) => (
-                <Skeleton className="h-72" key={agent.name} />
+                <Skeleton
+                  className="h-72"
+                  key={agent.name}
+                />
               ))}
             </div>
           ) : (
@@ -176,10 +159,7 @@ export function MarketplacePage() {
               {marketplaceAgents.map((agent) => (
                 <MarketplaceAgentCard
                   agent={agent}
-                  hired={
-                    hiredNames.has(agent.name.toLowerCase()) ||
-                    hiring === agent.name
-                  }
+                  hired={hiredNames.has(agent.name.toLowerCase()) || hiring === agent.name}
                   key={agent.name}
                   onHire={() => void hire(agent.name)}
                 />

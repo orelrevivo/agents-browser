@@ -12,10 +12,7 @@ export interface SkillActivityHandler {
   (event: { toolName: string; status: "started" | "finished" }): void;
 }
 
-export function createSkillTools(
-  skills: AgentSkill[],
-  onActivity: SkillActivityHandler,
-) {
+export function createSkillTools(skills: AgentSkill[], onActivity: SkillActivityHandler) {
   return skills.map((skill) => {
     const toolName = skillToolName(skill);
 

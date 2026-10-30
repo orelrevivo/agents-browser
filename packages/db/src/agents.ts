@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 export const agentInputSchema = z.object({
-  name: z.string().trim().min(1, "Give your agent a name.").max(80, "Keep the name under 80 characters."),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Give your agent a name.")
+    .max(80, "Keep the name under 80 characters."),
   description: z.string().trim().max(240, "Keep the description under 240 characters."),
   avatarType: z.enum(["icon", "image"]),
   avatarData: z.string().min(1),

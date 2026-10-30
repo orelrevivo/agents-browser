@@ -46,6 +46,7 @@ class CefApplication final : public CefApp,
   void EnforceTabBounds();
   void GetContentBounds(int* x, int* y, int* width, int* height) const;
   void SetOverlayVisibility(const std::string& value);
+  void SetComputerBounds(int x, int y, int width, int height);
   CommandChannel* channel_;
   CefWindowHandle parent_window_ = 0;
   int width_ = 1440;
@@ -62,6 +63,16 @@ class CefApplication final : public CefApp,
   std::string active_tab_id_ = "home";
   std::string layout_mode_ = "top";
   bool overlay_visible_ = false;
+  int overlay_x_ = 0;
+  int overlay_y_ = 0;
+  int overlay_width_ = 0;
+  int overlay_height_ = 0;
+  bool computer_visible_ = false;
+  std::string computer_tab_id_;
+  int computer_x_ = 0;
+  int computer_y_ = 0;
+  int computer_width_ = 0;
+  int computer_height_ = 0;
   std::vector<std::string> launch_args_;
   IMPLEMENT_REFCOUNTING(CefApplication);
 };

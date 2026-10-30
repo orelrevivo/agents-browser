@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+coverage/
+.git/
+.groubot/
+.next/
+out/
+pnpm-lock.yaml
+
+# Generated database and application artifacts.
+packages/db/drizzle/meta/
+apps/desktop/dist/
+apps/desktop/public/agent-assets/
+**/generated/
+**/*.min.js
+**/*.min.css
+
+# Binary and native dependency trees are not project source.
+packages/browser/native/cef/
+packages/browser/native/vendor/

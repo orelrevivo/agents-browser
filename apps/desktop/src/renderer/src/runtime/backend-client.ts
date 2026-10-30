@@ -26,8 +26,8 @@ export interface BackendRunEvent {
     | "completed"
     | "cancelled"
     | "tool_activity"
-  | "approval_request"
-  | "question"
+    | "approval_request"
+    | "question"
     | "error";
   delta?: string;
   content?: string;
@@ -68,8 +68,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let message = `Backend request failed (${response.status}).`;
     try {
-      message =
-        ((await response.json()) as { error?: string }).error ?? message;
+      message = ((await response.json()) as { error?: string }).error ?? message;
     } catch {}
     throw new Error(message);
   }
@@ -90,12 +89,9 @@ export const backendClient = {
         method: "PUT",
         body: JSON.stringify(input),
       }),
-    duplicate: (id: string) =>
-      request<Agent>(`/api/agents/${id}/duplicate`, { method: "POST" }),
-    remove: (id: string) =>
-      request<void>(`/api/agents/${id}`, { method: "DELETE" }),
-    setDefault: (id: string) =>
-      request<Agent>(`/api/agents/${id}/default`, { method: "PUT" }),
+    duplicate: (id: string) => request<Agent>(`/api/agents/${id}/duplicate`, { method: "POST" }),
+    remove: (id: string) => request<void>(`/api/agents/${id}`, { method: "DELETE" }),
+    setDefault: (id: string) => request<Agent>(`/api/agents/${id}/default`, { method: "PUT" }),
     setPinned: (id: string, pinned: boolean) =>
       request<Agent>(`/api/agents/${id}/pinned`, {
         method: "PUT",
@@ -115,18 +111,12 @@ export const backendClient = {
         method: "PUT",
         body: JSON.stringify(input),
       }),
-    remove: (id: string) =>
-      request<void>(`/api/groups/${id}`, { method: "DELETE" }),
+    remove: (id: string) => request<void>(`/api/groups/${id}`, { method: "DELETE" }),
   },
   chats: {
     list: () => request<Conversation[]>("/api/chats"),
-    get: (id: string) =>
-      request<ConversationWithMessages | undefined>(`/api/chats/${id}`),
-    create: (
-      agentId?: string | null,
-      groupId?: string | null,
-      permissionMode?: "ask" | "full",
-    ) =>
+    get: (id: string) => request<ConversationWithMessages | undefined>(`/api/chats/${id}`),
+    create: (agentId?: string | null, groupId?: string | null, permissionMode?: "ask" | "full") =>
       request<Conversation>("/api/chats", {
         method: "POST",
         body: JSON.stringify({
@@ -140,11 +130,15 @@ export const backendClient = {
         `/api/chats/${conversationId}/messages`,
         { method: "POST", body: JSON.stringify({ conversationId, content, metadata }) },
       ),
-    updateMessageMetadata: (conversationId: string, messageId: string, metadata: ChatMessageMetadata) =>
-      request<ChatMessage>(
-        `/api/chats/${conversationId}/messages/${messageId}`,
-        { method: "PATCH", body: JSON.stringify({ metadata }) },
-      ),
+    updateMessageMetadata: (
+      conversationId: string,
+      messageId: string,
+      metadata: ChatMessageMetadata,
+    ) =>
+      request<ChatMessage>(`/api/chats/${conversationId}/messages/${messageId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ metadata }),
+      }),
     rename: (id: string, title: string) =>
       request<Conversation>(`/api/chats/${id}`, {
         method: "PUT",
@@ -165,10 +159,8 @@ export const backendClient = {
         method: "PUT",
         body: JSON.stringify({ permissionMode }),
       }),
-    remove: (id: string) =>
-      request<void>(`/api/chats/${id}`, { method: "DELETE" }),
-    run: (requestId: string) =>
-      request<BackendRunSnapshot>(`/api/runs/${requestId}`),
+    remove: (id: string) => request<void>(`/api/chats/${id}`, { method: "DELETE" }),
+    run: (requestId: string) => request<BackendRunSnapshot>(`/api/runs/${requestId}`),
     active: () => request<BackendActiveRun[]>("/api/runs?active=true"),
   },
   memories: {
@@ -178,8 +170,7 @@ export const backendClient = {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    remove: (id: string) =>
-      request<void>(`/api/memories/${id}`, { method: "DELETE" }),
+    remove: (id: string) => request<void>(`/api/memories/${id}`, { method: "DELETE" }),
   },
   skills: {
     list: () => request<Skill[]>("/api/skills"),
@@ -193,8 +184,7 @@ export const backendClient = {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    remove: (id: string) =>
-      request<void>(`/api/skills/${id}`, { method: "DELETE" }),
+    remove: (id: string) => request<void>(`/api/skills/${id}`, { method: "DELETE" }),
   },
   ai: {
     config: () =>
@@ -207,12 +197,7 @@ export const backendClient = {
   },
   browser: {
     pending: () => request<BrowserRequest[]>("/api/browser/requests"),
-    complete: (
-      requestId: string,
-      ok: boolean,
-      result?: unknown,
-      error?: string,
-    ) =>
+    complete: (requestId: string, ok: boolean, result?: unknown, error?: string) =>
       request<void>("/api/browser/results", {
         method: "POST",
         body: JSON.stringify({ requestId, ok, result, error }),
@@ -221,6 +206,11 @@ export const backendClient = {
       request<void>("/api/browser/state", {
         method: "POST",
         body: JSON.stringify(tabs),
+      }),
+    setComputer: (conversationId: string, tabId: string | null) =>
+      request<void>("/api/browser/computer", {
+        method: "POST",
+        body: JSON.stringify({ conversationId, tabId }),
       }),
     approve: (approvalId: string, approved: boolean) =>
       request<void>(`/api/browser/approvals/${approvalId}`, {
@@ -249,7 +239,6 @@ export const backendClient = {
       request<{ started: boolean }>(`/api/automations/${id}/run`, {
         method: "POST",
       }),
-    remove: (id: string) =>
-      request<void>(`/api/automations/${id}`, { method: "DELETE" }),
+    remove: (id: string) => request<void>(`/api/automations/${id}`, { method: "DELETE" }),
   },
 };

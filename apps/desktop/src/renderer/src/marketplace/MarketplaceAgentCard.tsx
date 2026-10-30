@@ -8,11 +8,7 @@ interface MarketplaceAgentCardProps {
   onHire: () => void;
 }
 
-export function MarketplaceAgentCard({
-  agent,
-  hired,
-  onHire,
-}: MarketplaceAgentCardProps) {
+export function MarketplaceAgentCard({ agent, hired, onHire }: MarketplaceAgentCardProps) {
   return (
     <Card className="overflow-hidden border-0 bg-[#fbf8f4] text-[#171717] shadow-none dark:bg-[#252321] dark:text-[#f7f3ee]">
       <CardContent className="p-0">
@@ -36,15 +32,16 @@ export function MarketplaceAgentCard({
           </p>
           <ul className="space-y-2 text-sm leading-6">
             {agent.benefits.map((benefit) => (
-              <li className="flex items-start gap-2" key={benefit}>
+              <li
+                className="flex items-start gap-2"
+                key={benefit}
+              >
                 <Check className="mt-1 size-3.5 shrink-0 text-[#7c5b51] dark:text-[#e7ae9d]" />
                 <span>{benefit}</span>
               </li>
             ))}
           </ul>
-          <p className="text-sm leading-6 text-black/60 dark:text-white/60">
-            {agent.description}
-          </p>
+          <p className="text-sm leading-6 text-black/60 dark:text-white/60">{agent.description}</p>
           <div className="flex items-center gap-4 pt-1">
             <Button
               className="rounded-full bg-[#292725] px-4 text-white hover:bg-[#3b3835] dark:bg-[#f7f3ee] dark:text-[#292725] dark:hover:bg-white"

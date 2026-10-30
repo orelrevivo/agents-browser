@@ -14,11 +14,7 @@ interface SearchHistoryPanelProps {
   onClear: () => void;
 }
 
-export function SearchHistoryPanel({
-  entries,
-  onSelect,
-  onClear,
-}: SearchHistoryPanelProps) {
+export function SearchHistoryPanel({ entries, onSelect, onClear }: SearchHistoryPanelProps) {
   return (
     <div
       className="absolute left-0 right-0 top-full z-[100] overflow-hidden rounded-b-xl border border-t-0 border-border bg-popover"
@@ -56,9 +52,7 @@ export function SearchHistoryPanel({
               )}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs text-foreground">
-                {entry.label}
-              </span>
+              <span className="block truncate text-xs text-foreground">{entry.label}</span>
               <span className="block truncate text-[11px] text-muted-foreground">
                 {entry.value}
               </span>

@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import type { Conversation } from "@groubot/db";
 import { ChatWorkspace } from "./ChatWorkspace";
 
-const groupConversationRequests = new Map<
-  string,
-  Promise<Conversation>
->();
+const groupConversationRequests = new Map<string, Promise<Conversation>>();
 
 export function GroupPage({ groupId }: { groupId: string }) {
   const [conversation, setConversation] = useState<Conversation>();
@@ -44,21 +41,15 @@ export function GroupPage({ groupId }: { groupId: string }) {
       }
 
       const groupConversations = conversations.filter(
-        (candidate) =>
-          candidate.groupId === groupId || candidate.title === group.name,
+        (candidate) => candidate.groupId === groupId || candidate.title === group.name,
       );
       const existingConversations = await Promise.all(
-        groupConversations.map((candidate) =>
-          window.groubot.chats.get(candidate.id),
-        ),
+        groupConversations.map((candidate) => window.groubot.chats.get(candidate.id)),
       );
       const existing = existingConversations
-        .filter((candidate): candidate is NonNullable<typeof candidate> =>
-          Boolean(candidate),
-        )
+        .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
         .sort((left, right) => {
-          const messageDifference =
-            right.messages.length - left.messages.length;
+          const messageDifference = right.messages.length - left.messages.length;
           return messageDifference || right.updatedAt - left.updatedAt;
         })[0];
       if (existing) {
@@ -68,10 +59,7 @@ export function GroupPage({ groupId }: { groupId: string }) {
             groupId,
           });
         }
-        localStorage.setItem(
-          `groubot.group-conversation.${groupId}`,
-          existing.id,
-        );
+        localStorage.setItem(`groubot.group-conversation.${groupId}`, existing.id);
         if (existing.title === "New chat") {
           await window.groubot.chats.rename({
             id: existing.id,
@@ -82,9 +70,7 @@ export function GroupPage({ groupId }: { groupId: string }) {
         return;
       }
 
-      const agentId = agents.find((agent) =>
-        group.agentIds.includes(agent.id),
-      )?.id;
+      const agentId = agents.find((agent) => group.agentIds.includes(agent.id))?.id;
       let request = groupConversationRequests.get(groupId);
       if (!request) {
         request = window.groubot.chats.create(agentId, groupId);
@@ -96,10 +82,7 @@ export function GroupPage({ groupId }: { groupId: string }) {
       } finally {
         groupConversationRequests.delete(groupId);
       }
-      localStorage.setItem(
-        `groubot.group-conversation.${groupId}`,
-        created.id,
-      );
+      localStorage.setItem(`groubot.group-conversation.${groupId}`, created.id);
       await window.groubot.chats.rename({
         id: created.id,
         title: group.name,
@@ -121,5 +104,10 @@ export function GroupPage({ groupId }: { groupId: string }) {
     );
   }
 
-  return <ChatWorkspace conversationId={conversation.id} groupId={groupId} />;
+  return (
+    <ChatWorkspace
+      conversationId={conversation.id}
+      groupId={groupId}
+    />
+  );
 }

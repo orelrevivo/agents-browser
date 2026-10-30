@@ -1,7 +1,4 @@
-import type {
-  BrowserDownloadState,
-  BrowserState,
-} from "@groubot/browser/types";
+import type { BrowserDownloadState, BrowserState } from "@groubot/browser/types";
 import type {
   Agent,
   AgentGroup,
@@ -37,12 +34,23 @@ interface GroubotBrowserApi {
     visible: boolean,
     bounds?: { x: number; y: number; width: number; height: number },
   ) => Promise<void>;
+  openComputer: (
+    conversationId: string,
+    tabId: string,
+    url: string,
+    bounds: { x: number; y: number; width: number; height: number },
+  ) => Promise<void>;
+  closeComputer: (conversationId: string, tabId: string) => Promise<void>;
+  resizeComputer: (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => Promise<void>;
   pauseDownload: (downloadId: string) => Promise<void>;
   cancelDownload: (downloadId: string) => Promise<void>;
   getDownloads: () => Promise<BrowserDownloadState[]>;
-  onDownloadsChanged: (
-    listener: (downloads: BrowserDownloadState[]) => void,
-  ) => () => void;
+  onDownloadsChanged: (listener: (downloads: BrowserDownloadState[]) => void) => () => void;
   onStateChanged: (listener: (state: BrowserState) => void) => () => void;
 }
 
@@ -67,11 +75,7 @@ interface GroubotGroupsApi {
 interface GroubotSkillsApi {
   list: () => Promise<Skill[]>;
   create: (input: SkillInput) => Promise<Skill>;
-  importGithub: (input: {
-    name: string;
-    description: string;
-    url: string;
-  }) => Promise<Skill>;
+  importGithub: (input: { name: string; description: string; url: string }) => Promise<Skill>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -97,12 +101,14 @@ interface GroubotChatsApi {
     content: string;
     metadata?: ChatMessageMetadata;
   }) => Promise<{ requestId: string; message: ChatMessage; taskId?: string }>;
-  active: () => Promise<{
-    requestId: string;
-    conversationId: string;
-    done: boolean;
-    status: "queued" | "running";
-  }[]>;
+  active: () => Promise<
+    {
+      requestId: string;
+      conversationId: string;
+      done: boolean;
+      status: "queued" | "running";
+    }[]
+  >;
   updateMessageMetadata: (input: {
     conversationId: string;
     messageId: string;
@@ -110,13 +116,8 @@ interface GroubotChatsApi {
   }) => Promise<ChatMessage>;
   cancel: (requestId: string) => Promise<string>;
   onStream: (listener: (event: ChatStreamEvent) => void) => () => void;
-  respondToApproval: (
-    approvalId: string,
-    approved: boolean,
-  ) => Promise<boolean>;
-  onApprovalRequest: (
-    listener: (request: ApprovalRequest) => void,
-  ) => () => void;
+  respondToApproval: (approvalId: string, approved: boolean) => Promise<boolean>;
+  onApprovalRequest: (listener: (request: ApprovalRequest) => void) => () => void;
   rename: (input: { id: string; title: string }) => Promise<Conversation>;
   attachToGroup: (input: { id: string; groupId: string }) => Promise<Conversation>;
   setPinned: (input: { id: string; pinned: boolean }) => Promise<Conversation>;
@@ -147,15 +148,15 @@ interface ChatStreamEvent {
   requestId: string;
   conversationId: string;
   type:
-  | "started"
-  | "delta"
-  | "completed"
-  | "cancelled"
-  | "error"
-  | "tool_activity"
-  | "approval_request"
-  | "question"
-  | "waiting_for_human";
+    | "started"
+    | "delta"
+    | "completed"
+    | "cancelled"
+    | "error"
+    | "tool_activity"
+    | "approval_request"
+    | "question"
+    | "waiting_for_human";
   delta?: string;
   content?: string;
   code?: string;
@@ -204,4 +205,4 @@ declare global {
   }
 }
 
-export { };
+export {};

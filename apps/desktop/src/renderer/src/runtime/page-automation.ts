@@ -1,9 +1,6 @@
 const cursorId = "__groubot_agent_cursor__";
 
-export function showAgentCursorScript(
-  selector: string,
-  action: "click" | "type",
-): string {
+export function showAgentCursorScript(selector: string, action: "click" | "type"): string {
   return `(()=>{
     const e=document.querySelector(${JSON.stringify(selector)});
     if(!e) throw new Error('Element not found');

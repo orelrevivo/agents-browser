@@ -1,10 +1,12 @@
 #pragma once
 
 #include "include/cef_client.h"
+#include "include/cef_context_menu_handler.h"
 #include "include/cef_download_handler.h"
 #include "include/cef_keyboard_handler.h"
 #include "include/cef_process_message.h"
 #include "include/cef_request_handler.h"
+#include "include/cef_resource_request_handler.h"
 
 #include <functional>
 #include <map>
@@ -15,6 +17,7 @@ class CommandChannel;
 
 class CefBrowserClient final : public CefClient,
                                public CefDisplayHandler,
+                               public CefContextMenuHandler,
                                public CefKeyboardHandler,
                                public CefLifeSpanHandler,
                                public CefRequestHandler,
@@ -27,9 +30,18 @@ class CefBrowserClient final : public CefClient,
   CefBrowserClient(CommandChannel* channel, std::string tab_id, EventHandler handler, PopupHandler popup_handler = {});
 
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override { return this; }
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+  CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefFrame> frame,
+      CefRefPtr<CefRequest> request,
+      bool is_navigation,
+      bool is_download,
+      const CefString& request_initiator,
+      bool& disable_default_handling) override;
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
   CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
 
@@ -57,6 +69,15 @@ class CefBrowserClient final : public CefClient,
                         const CefString& message,
                         const CefString& source,
                         int line) override;
+  void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame> frame,
+                           CefRefPtr<CefContextMenuParams> params,
+                           CefRefPtr<CefMenuModel> model) override;
+  bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                            CefRefPtr<CefFrame> frame,
+                            CefRefPtr<CefContextMenuParams> params,
+                            int command_id,
+                            EventFlags event_flags) override;
   bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
                      const CefKeyEvent& event,
                      CefEventHandle os_event,

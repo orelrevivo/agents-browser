@@ -18,9 +18,20 @@ function pngFiles(directory) {
 
 const files = pngFiles(agentsDirectory);
 
-const imports = files.map((file, index) => `import avatar${index} from "../../../../public/agents/${file}";`).join("\n");
-const assets = files.map((file, index) => ({ name: file.replace(/\.png$/i, ""), path: `/agents/${file}`, src: `avatar${index}` }));
-const entries = assets.map(({ name, path, src }) => `  { name: ${JSON.stringify(name)}, path: ${JSON.stringify(path)}, src: ${src} },`).join("\n");
+const imports = files
+  .map((file, index) => `import avatar${index} from "../../../../public/agents/${file}";`)
+  .join("\n");
+const assets = files.map((file, index) => ({
+  name: file.replace(/\.png$/i, ""),
+  path: `/agents/${file}`,
+  src: `avatar${index}`,
+}));
+const entries = assets
+  .map(
+    ({ name, path, src }) =>
+      `  { name: ${JSON.stringify(name)}, path: ${JSON.stringify(path)}, src: ${src} },`,
+  )
+  .join("\n");
 const source = `// Generated from ${relative(desktopDirectory, agentsDirectory)}. Do not edit by hand.\n${imports}\n\nexport const agentAvatarAssets = [\n${entries}\n] as const;\n`;
 writeFileSync(outputPath, source);
 

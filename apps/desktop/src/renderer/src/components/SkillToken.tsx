@@ -56,7 +56,10 @@ export function TabToken({
       tabIndex={onClick ? 0 : undefined}
     >
       <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 truncate" title={url}>
+      <span
+        className="min-w-0 truncate"
+        title={url}
+      >
         {title}
       </span>
       {removable && (
@@ -93,7 +96,12 @@ export function MessageContent({
         tableLines.push(lines[index]);
         index += 1;
       }
-      blocks.push(<MessageTable key={`table-${index}`} lines={tableLines} />);
+      blocks.push(
+        <MessageTable
+          key={`table-${index}`}
+          lines={tableLines}
+        />,
+      );
       continue;
     }
 
@@ -104,14 +112,23 @@ export function MessageContent({
     }
     if (/^#{1,3}\s+/.test(line)) {
       blocks.push(
-        <h3 className="mb-2 mt-3 text-sm font-semibold" key={`heading-${index}`}>
+        <h3
+          className="mb-2 mt-3 text-sm font-semibold"
+          key={`heading-${index}`}
+        >
           {line.replace(/^#{1,3}\s+/, "")}
         </h3>,
       );
     } else {
       blocks.push(
-        <p className="whitespace-pre-wrap break-words" key={`line-${index}`}>
-          <InlineMessageContent content={line} onOpenUrl={openUrl} />
+        <p
+          className="whitespace-pre-wrap break-words"
+          key={`line-${index}`}
+        >
+          <InlineMessageContent
+            content={line}
+            onOpenUrl={openUrl}
+          />
         </p>,
       );
     }
@@ -121,7 +138,13 @@ export function MessageContent({
   return <div className="space-y-2">{blocks}</div>;
 }
 
-function InlineMessageContent({ content, onOpenUrl }: { content: string; onOpenUrl: (url: string) => void }) {
+function InlineMessageContent({
+  content,
+  onOpenUrl,
+}: {
+  content: string;
+  onOpenUrl: (url: string) => void;
+}) {
   const pattern = /\/([\w-]+)|\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
   const parts: React.ReactNode[] = [];
   let cursor = 0;
@@ -130,7 +153,12 @@ function InlineMessageContent({ content, onOpenUrl }: { content: string; onOpenU
   while (match) {
     if (match.index > cursor) parts.push(content.slice(cursor, match.index));
     if (match[1]) {
-      parts.push(<SkillToken key={`${match.index}-${match[1]}`} name={match[1]} />);
+      parts.push(
+        <SkillToken
+          key={`${match.index}-${match[1]}`}
+          name={match[1]}
+        />,
+      );
     } else if (match[2] && match[3]) {
       const url = match[3];
       parts.push(
@@ -183,7 +211,10 @@ function MessageTable({ lines }: { lines: string[] }) {
           <thead className="bg-muted/50">
             <tr>
               {headers.map((header, index) => (
-                <th className="px-3 py-2 font-semibold" key={`${header}-${index}`}>
+                <th
+                  className="px-3 py-2 font-semibold"
+                  key={`${header}-${index}`}
+                >
                   {header}
                 </th>
               ))}
@@ -191,9 +222,15 @@ function MessageTable({ lines }: { lines: string[] }) {
           </thead>
           <tbody>
             {body.map((row, rowIndex) => (
-              <tr className="border-t border-border/60" key={rowIndex}>
+              <tr
+                className="border-t border-border/60"
+                key={rowIndex}
+              >
                 {headers.map((_, columnIndex) => (
-                  <td className="px-3 py-2 align-top text-muted-foreground" key={columnIndex}>
+                  <td
+                    className="px-3 py-2 align-top text-muted-foreground"
+                    key={columnIndex}
+                  >
                     {row[columnIndex] || "—"}
                   </td>
                 ))}

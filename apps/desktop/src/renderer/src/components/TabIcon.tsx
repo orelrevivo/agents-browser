@@ -1,13 +1,7 @@
 import { useState } from "react";
 import { Globe2 } from "./icons";
 
-export function TabIcon({
-  kind,
-  faviconUrl,
-}: {
-  kind: string;
-  faviconUrl?: string;
-}) {
+export function TabIcon({ kind, faviconUrl }: { kind: string; faviconUrl?: string }) {
   const [failed, setFailed] = useState(false);
   const showFavicon = kind === "web" && Boolean(faviconUrl) && !failed;
 

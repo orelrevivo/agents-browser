@@ -8,11 +8,7 @@ import { SkillsPage } from "./components/SkillsPage";
 import { MarketplacePage } from "./marketplace/MarketplacePage";
 import { DownloadsPage } from "./components/DownloadsPage";
 import { TabBar } from "./components/TabBar";
-import {
-  SettingsPage,
-  type AppearanceTheme,
-  type TabLayout,
-} from "./components/SettingsPage";
+import { SettingsPage, type AppearanceTheme, type TabLayout } from "./components/SettingsPage";
 import { useBrowserState } from "./hooks/useBrowserState";
 import "./styles.css";
 import { installGroubotBridge } from "./runtime/groubot-bridge";
@@ -52,9 +48,7 @@ function App() {
     return localStorage.getItem("groubot.theme") === "light" ? "light" : "dark";
   });
   const [tabLayout, setTabLayout] = useState<TabLayout>(() => {
-    return localStorage.getItem("groubot.tabLayout") === "sidebar"
-      ? "sidebar"
-      : "top";
+    return localStorage.getItem("groubot.tabLayout") === "sidebar" ? "sidebar" : "top";
   });
   const [approvalRequest, setApprovalRequest] = useState<{
     approvalId: string;
@@ -63,6 +57,7 @@ function App() {
     input: Record<string, unknown>;
   }>();
   const editingAddress = useRef(false);
+  const addressSubmitInFlight = useRef(false);
   const addressRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -76,10 +71,7 @@ function App() {
     void window.groubot.browser.setLayout(tabLayout);
   }, [tabLayout]);
 
-  useEffect(
-    () => window.groubot.chats.onApprovalRequest(setApprovalRequest),
-    [],
-  );
+  useEffect(() => window.groubot.chats.onApprovalRequest(setApprovalRequest), []);
 
   useEffect(() => {
     function handleNewGroup() {
@@ -116,10 +108,7 @@ function App() {
     if (!approvalRequest) return;
     const current = approvalRequest;
     try {
-      await window.groubot.chats.respondToApproval(
-        current.approvalId,
-        approved,
-      );
+      await window.groubot.chats.respondToApproval(current.approvalId, approved);
       setApprovalRequest(undefined);
     } catch {
       /* the chat stream will surface a failed approval response */
@@ -128,9 +117,7 @@ function App() {
 
   useEffect(() => {
     if (!editingAddress.current)
-      setAddress(
-        activeTab?.kind === "home" ? "groubot://" : (activeTab?.url ?? ""),
-      );
+      setAddress(activeTab?.kind === "home" ? "groubot://" : (activeTab?.url ?? ""));
     if (activeTab?.kind === "web" && activeTab.url) {
       recordHistory(activeTab.url);
     }
@@ -165,9 +152,7 @@ function App() {
       if (event.ctrlKey && event.key === "Tab") {
         event.preventDefault();
         const tabs = browserState.tabs;
-        const index = tabs.findIndex(
-          (tab) => tab.id === browserState.activeTabId,
-        );
+        const index = tabs.findIndex((tab) => tab.id === browserState.activeTabId);
         if (index >= 0 && tabs.length > 1) {
           const nextIndex = event.shiftKey
             ? (index - 1 + tabs.length) % tabs.length
@@ -176,27 +161,17 @@ function App() {
         }
         return;
       }
-      if (
-        (event.altKey && event.key === "ArrowLeft") ||
-        (event.metaKey && event.key === "[")
-      ) {
+      if ((event.altKey && event.key === "ArrowLeft") || (event.metaKey && event.key === "[")) {
         event.preventDefault();
         void window.groubot.browser.goBack();
         return;
       }
-      if (
-        (event.altKey && event.key === "ArrowRight") ||
-        (event.metaKey && event.key === "]")
-      ) {
+      if ((event.altKey && event.key === "ArrowRight") || (event.metaKey && event.key === "]")) {
         event.preventDefault();
         void window.groubot.browser.goForward();
         return;
       }
-      if (
-        event.key === "Tab" &&
-        activeTab?.kind === "home" &&
-        !insideInteractive
-      ) {
+      if (event.key === "Tab" && activeTab?.kind === "home" && !insideInteractive) {
         event.preventDefault();
         addressRef.current?.focus();
       }
@@ -206,17 +181,27 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeTab, browserState.activeTabId, browserState.tabs]);
 
-  function submitAddress(event: FormEvent<HTMLFormElement>) {
+  async function submitAddress(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    editingAddress.current = false;
-    if (!address.trim()) {
-      setAddress(
-        activeTab?.kind === "home" ? "groubot://" : (activeTab?.url ?? ""),
-      );
+    if (addressSubmitInFlight.current) return;
+    const target = address.trim();
+    if (!target) {
+      setAddress(activeTab?.kind === "home" ? "groubot://" : (activeTab?.url ?? ""));
+      addressRef.current?.focus();
       return;
     }
-    recordHistory(address);
-    void window.groubot.browser.navigate(address);
+    addressSubmitInFlight.current = true;
+    // Keep the toolbar value authoritative while the native browser surface
+    // changes tabs. This prevents the active-tab effect from racing the Enter
+    // submission and making the first keypress appear to do nothing.
+    editingAddress.current = true;
+    recordHistory(target);
+    try {
+      await window.groubot.browser.navigate(target);
+    } finally {
+      addressSubmitInFlight.current = false;
+      window.requestAnimationFrame(() => addressRef.current?.focus());
+    }
   }
 
   function recordHistory(input: string) {
@@ -226,20 +211,19 @@ function App() {
     const entry: SearchHistoryEntry = {
       id: crypto.randomUUID(),
       value,
-      label: isUrl ? (() => {
-        try {
-          return new URL(value).hostname.replace(/^www\./, "");
-        } catch {
-          return value;
-        }
-      })() : value,
+      label: isUrl
+        ? (() => {
+            try {
+              return new URL(value).hostname.replace(/^www\./, "");
+            } catch {
+              return value;
+            }
+          })()
+        : value,
       kind: isUrl ? "site" : "search",
     };
     setSearchHistory((current) => {
-      const next = [entry, ...current.filter((item) => item.value !== value)].slice(
-        0,
-        30,
-      );
+      const next = [entry, ...current.filter((item) => item.value !== value)].slice(0, 30);
       localStorage.setItem("groubot.search-history", JSON.stringify(next));
       return next;
     });
@@ -274,19 +258,20 @@ function App() {
   return (
     <main
       className={`flex h-screen min-h-0 flex-col overflow-hidden text-foreground selection:bg-primary/30 ${
-        tabLayout === "sidebar"
-          ? "gap-[4px] p-3 bg-browser-frame"
-          : "bg-background"
+        tabLayout === "sidebar" ? "gap-[4px] p-3 bg-browser-frame" : "bg-background"
       }`}
     >
-      {tabLayout === "top" && <TabBar state={browserState} />}
+      {tabLayout === "top" && (
+        <TabBar
+          isLight={theme === "light"}
+          state={browserState}
+        />
+      )}
       {approvalRequest && (
         <div className="pointer-events-auto fixed right-3 top-[72px] z-[2147483647] flex max-w-[min(30rem,calc(100vw-1.5rem))] items-center gap-3 rounded-lg border border-primary/40 bg-popover px-3 py-2 text-xs text-popover-foreground shadow-xl">
           <ShieldCheck className="size-4 shrink-0 text-primary" />
           <span className="min-w-0 flex-1">
-            <span className="block font-medium">
-              Permission needed: {approvalRequest.toolName}
-            </span>
+            <span className="block font-medium">Permission needed: {approvalRequest.toolName}</span>
             <span className="block truncate text-muted-foreground">
               {approvalRequest.description}
             </span>
@@ -310,13 +295,15 @@ function App() {
       )}
       <div className="flex min-h-0 flex-1">
         {tabLayout === "sidebar" && (
-          <TabBar orientation="sidebar" state={browserState} />
+          <TabBar
+            isLight={theme === "light"}
+            orientation="sidebar"
+            state={browserState}
+          />
         )}
         <div
           className={`flex min-w-0 flex-1 flex-col ${
-            tabLayout === "sidebar"
-              ? "overflow-hidden rounded-md bg-background shadow-lg"
-              : ""
+            tabLayout === "sidebar" ? "overflow-hidden rounded-md bg-background shadow-lg" : ""
           }`}
         >
           <BrowserToolbar
@@ -334,9 +321,7 @@ function App() {
             onNewTab={openNewTab}
             onNewWindow={() => void window.groubot.browser.newWindow()}
             onOpenAgents={openAgents}
-            onOpenDownloads={() =>
-              void window.groubot.browser.createTab("groubot://downloads")
-            }
+            onOpenDownloads={() => void window.groubot.browser.createTab("groubot://downloads")}
             downloads={downloads}
             onOverlayChange={(open, bounds) => {
               void window.groubot.browser.setOverlayVisible(open, bounds);
@@ -349,9 +334,7 @@ function App() {
             {activeTab?.kind === "home" ? (
               <ChatWorkspace />
             ) : activeTab?.kind === "chat" ? (
-              <ChatWorkspace
-                conversationId={activeTab.url.replace("groubot://chat/", "")}
-              />
+              <ChatWorkspace conversationId={activeTab.url.replace("groubot://chat/", "")} />
             ) : activeTab?.kind === "agents" ? (
               <AgentsPage />
             ) : activeTab?.kind === "skills" ? (
@@ -364,9 +347,7 @@ function App() {
               <DownloadsPage downloads={downloads} />
             ) : activeTab?.kind === "preferences" ? (
               <SettingsPage
-                onBack={() =>
-                  void window.groubot.browser.navigate("groubot://")
-                }
+                onBack={() => void window.groubot.browser.navigate("groubot://")}
                 onTabLayoutChange={setTabLayout}
                 onThemeChange={setTheme}
                 tabLayout={tabLayout}

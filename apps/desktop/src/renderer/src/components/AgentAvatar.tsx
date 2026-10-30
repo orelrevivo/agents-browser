@@ -17,7 +17,17 @@ export function AgentAvatar({
   const customAvatar = parseCustomAvatar(avatarData);
   const pixelSizes = { xs: 20, sm: 36, md: 32, lg: 40, xl: 70 } as const;
   if (avatarData.startsWith("data:image/")) {
-    return <div className={`shrink-0 overflow-hidden rounded-full ${size === "xs" ? "size-5" : size === "sm" ? "size-9" : size === "md" ? "size-8" : size === "lg" ? "size-10" : "size-70"}`}><img alt={agent?.name ?? "Agent"} className="size-full object-cover" src={avatarData} /></div>;
+    return (
+      <div
+        className={`shrink-0 overflow-hidden rounded-full ${size === "xs" ? "size-5" : size === "sm" ? "size-9" : size === "md" ? "size-8" : size === "lg" ? "size-10" : "size-70"}`}
+      >
+        <img
+          alt={agent?.name ?? "Agent"}
+          className="size-full object-cover"
+          src={avatarData}
+        />
+      </div>
+    );
   }
   if (customAvatar) {
     return (
@@ -31,16 +41,14 @@ export function AgentAvatar({
   }
   const asset =
     agentAvatarAssets.find((candidate) => candidate.path === avatarData) ??
-    marketplaceAgentAvatarAssets.find(
-      (candidate) => candidate.path === avatarData,
-    ) ??
+    marketplaceAgentAvatarAssets.find((candidate) => candidate.path === avatarData) ??
     agentAvatarAssets[0];
   const sizes = {
     xs: "size-5",
     sm: "size-9",
     md: "size-8",
     lg: "size-10",
-    xl: "size-70",
+    xl: "size-15",
   } as const;
   return (
     <div className={`shrink-0 overflow-hidden rounded-full ${sizes[size]}`}>

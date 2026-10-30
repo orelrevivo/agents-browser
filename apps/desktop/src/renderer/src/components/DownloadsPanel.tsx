@@ -1,25 +1,21 @@
 import { Button, Popover, PopoverContent, PopoverTrigger } from "@groubot/ui";
 import type { BrowserDownloadState } from "@groubot/browser/types";
-import {
-  CheckCircle2,
-  Download,
-  LoaderCircle,
-  Pause,
-  Play,
-  X,
-} from "lucide-react";
+import { CheckCircle2, Download, LoaderCircle, Pause, Play, X } from "lucide-react";
+import { useBrowserOverlay, type BrowserOverlayBounds } from "./useBrowserOverlay";
 
 interface DownloadsPanelProps {
   downloads?: BrowserDownloadState[];
-  onOverlayChange: (open: boolean) => void;
+  onOverlayChange: (open: boolean, bounds?: BrowserOverlayBounds) => void;
 }
 
-export function DownloadsPanel({
-  downloads = [],
-  onOverlayChange,
-}: DownloadsPanelProps) {
+export function DownloadsPanel({ downloads = [], onOverlayChange }: DownloadsPanelProps) {
+  const overlay = useBrowserOverlay(onOverlayChange);
+
   return (
-    <Popover onOpenChange={onOverlayChange}>
+    <Popover
+      open={overlay.open}
+      onOpenChange={overlay.onOpenChange}
+    >
       <PopoverTrigger asChild>
         <Button
           aria-label="Open downloads"
@@ -30,28 +26,34 @@ export function DownloadsPanel({
           <Download className="size-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-3">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Downloads</p>
-            <p className="text-xs text-muted-foreground">
-              Recent browser downloads
-            </p>
+      <PopoverContent
+        align="end"
+        className="w-80 p-3"
+      >
+        <div ref={overlay.surfaceRef}>
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Downloads</p>
+              <p className="text-xs text-muted-foreground">Recent browser downloads</p>
+            </div>
+            <Download className="size-4 text-muted-foreground" />
           </div>
-          <Download className="size-4 text-muted-foreground" />
-        </div>
 
-        {downloads.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border px-4 py-7 text-center">
-            <p className="text-xs text-muted-foreground">No downloads yet.</p>
-          </div>
-        ) : (
-          <div className="grid gap-2">
-            {downloads.map((download) => (
-              <DownloadItem download={download} key={download.id} />
-            ))}
-          </div>
-        )}
+          {downloads.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border px-4 py-7 text-center">
+              <p className="text-xs text-muted-foreground">No downloads yet.</p>
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              {downloads.map((download) => (
+                <DownloadItem
+                  download={download}
+                  key={download.id}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -69,15 +71,9 @@ export function DownloadItem({ download }: { download: BrowserDownloadState }) {
         ) : (
           <CheckCircle2 className="size-4 text-emerald-400" />
         )}
-        <p className="min-w-0 flex-1 truncate text-xs font-medium">
-          {download.fileName}
-        </p>
+        <p className="min-w-0 flex-1 truncate text-xs font-medium">{download.fileName}</p>
         <span className="text-[11px] text-muted-foreground">
-          {isDownloading
-            ? `${download.progress}%`
-            : isPaused
-              ? "Paused"
-              : "Done"}
+          {isDownloading ? `${download.progress}%` : isPaused ? "Paused" : "Done"}
         </span>
       </div>
       {(isDownloading || isPaused) && (
@@ -101,11 +97,7 @@ export function DownloadItem({ download }: { download: BrowserDownloadState }) {
               }}
               variant="ghost"
             >
-              {isPaused ? (
-                <Play className="size-3.5" />
-              ) : (
-                <Pause className="size-3.5" />
-              )}
+              {isPaused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
               <span>{isPaused ? "Resume" : "Pause"}</span>
             </Button>
             <Button

@@ -7,12 +7,12 @@ Create a personal team of specialized agents, watch their work in real time, ass
 
 ## Why Groubot?
 
-| Standard browser | Groubot |
-| --- | --- |
-| You browse and manage every task yourself. | Agents can work alongside you in the same browser. |
-| One general browsing experience. | Specialized, customizable agents with distinct instructions and personalities. |
-| Automation is usually separate from the browser. | Agent activity, tabs, permissions, and conversations share one workspace. |
-| No built-in local agent memory or team structure. | Local persistence for agents, chats, skills, and collaborative agent groups. |
+| Standard browser                                  | Groubot                                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------ |
+| You browse and manage every task yourself.        | Agents can work alongside you in the same browser.                             |
+| One general browsing experience.                  | Specialized, customizable agents with distinct instructions and personalities. |
+| Automation is usually separate from the browser.  | Agent activity, tabs, permissions, and conversations share one workspace.      |
+| No built-in local agent memory or team structure. | Local persistence for agents, chats, skills, and collaborative agent groups.   |
 
 ## Current status
 

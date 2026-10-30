@@ -9,8 +9,58 @@ export const AlertDialogOverlay = AlertDialogPrimitive.Overlay;
 export const AlertDialogCancel = AlertDialogPrimitive.Cancel;
 export const AlertDialogAction = AlertDialogPrimitive.Action;
 
-export function AlertDialogContent({ className, ...props }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>) { return <AlertDialogPrimitive.Portal><AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60" /><AlertDialogPrimitive.Content className={cn("fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl", className)} {...props} /></AlertDialogPrimitive.Portal>; }
-export function AlertDialogHeader({ className, ...props }: ComponentPropsWithoutRef<"div">) { return <div className={cn("flex flex-col gap-2 text-left", className)} {...props} />; }
-export function AlertDialogFooter({ className, ...props }: ComponentPropsWithoutRef<"div">) { return <div className={cn("mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)} {...props} />; }
-export function AlertDialogTitle({ className, ...props }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Title>) { return <AlertDialogPrimitive.Title className={cn("text-lg font-semibold", className)} {...props} />; }
-export function AlertDialogDescription({ className, ...props }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Description>) { return <AlertDialogPrimitive.Description className={cn("text-sm text-muted-foreground", className)} {...props} />; }
+export function AlertDialogContent({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>) {
+  return (
+    <AlertDialogPrimitive.Portal>
+      <AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-sheet-fade-out data-[state=open]:animate-sheet-fade-in" />
+      <AlertDialogPrimitive.Content
+        className={cn(
+          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl outline-none data-[state=closed]:animate-dialog-out data-[state=open]:animate-dialog-in",
+          className,
+        )}
+        {...props}
+      />
+    </AlertDialogPrimitive.Portal>
+  );
+}
+export function AlertDialogHeader({ className, ...props }: ComponentPropsWithoutRef<"div">) {
+  return (
+    <div
+      className={cn("flex flex-col gap-2 text-left", className)}
+      {...props}
+    />
+  );
+}
+export function AlertDialogFooter({ className, ...props }: ComponentPropsWithoutRef<"div">) {
+  return (
+    <div
+      className={cn("mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+      {...props}
+    />
+  );
+}
+export function AlertDialogTitle({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Title>) {
+  return (
+    <AlertDialogPrimitive.Title
+      className={cn("text-lg font-semibold", className)}
+      {...props}
+    />
+  );
+}
+export function AlertDialogDescription({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Description>) {
+  return (
+    <AlertDialogPrimitive.Description
+      className={cn("text-sm text-muted-foreground", className)}
+      {...props}
+    />
+  );
+}

@@ -2,13 +2,7 @@ import type { Skill } from "@groubot/db";
 import { Button, Card, CardContent } from "@groubot/ui";
 import { Check, FileCode2, Github, Trash2 } from "lucide-react";
 
-export function SkillCard({
-  skill,
-  onDelete,
-}: {
-  skill: Skill;
-  onDelete: () => void;
-}) {
+export function SkillCard({ skill, onDelete }: { skill: Skill; onDelete: () => void }) {
   return (
     <Card className="overflow-hidden border-0 bg-[#fbf8f4] text-[#171717] shadow-none dark:bg-[#252321] dark:text-[#f7f3ee]">
       <CardContent className="p-0">
@@ -46,9 +40,7 @@ export function SkillCard({
             </p>
           </div>
           <div className="flex items-center justify-between pt-1">
-            <span className="text-xs text-black/50 dark:text-white/50">
-              Reusable interaction
-            </span>
+            <span className="text-xs text-black/50 dark:text-white/50">Reusable interaction</span>
             <Button
               aria-label={`Delete ${skill.name}`}
               className="size-8 rounded-full text-black/60 hover:text-destructive dark:text-white/60"

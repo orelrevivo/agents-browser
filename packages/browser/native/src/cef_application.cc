@@ -71,6 +71,97 @@ void ClearRestoredWindowState(const std::string& profile) {
   std::filesystem::remove_all(std::filesystem::path(profile) / "Default" / "Sessions_Encrypted", error);
 }
 
+void ResetWindowShape(Display* display, Window window) {
+  XShapeCombineMask(display, window, ShapeBounding, 0, 0, None, ShapeSet);
+  XShapeCombineMask(display, window, ShapeInput, 0, 0, None, ShapeSet);
+  XShapeCombineMask(display, window, ShapeClip, 0, 0, None, ShapeSet);
+}
+
+void AddShapeRectangle(std::vector<XRectangle>* rectangles,
+                       int x,
+                       int y,
+                       int width,
+                       int height,
+                       int window_width,
+                       int window_height) {
+  const auto left = std::clamp(x, 0, window_width);
+  const auto top = std::clamp(y, 0, window_height);
+  const auto right = std::clamp(x + width, 0, window_width);
+  const auto bottom = std::clamp(y + height, 0, window_height);
+  if (right <= left || bottom <= top) return;
+
+  XRectangle rectangle{};
+  rectangle.x = static_cast<short>(left);
+  rectangle.y = static_cast<short>(top);
+  rectangle.width = static_cast<unsigned short>(right - left);
+  rectangle.height = static_cast<unsigned short>(bottom - top);
+  rectangles->push_back(rectangle);
+}
+
+void ApplyOverlayWindowShape(Display* display,
+                             Window window,
+                             int window_width,
+                             int window_height,
+                             int content_x,
+                             int content_y,
+                             int content_width,
+                             int content_height,
+                             int overlay_x,
+                             int overlay_y,
+                             int overlay_width,
+                             int overlay_height) {
+  std::vector<XRectangle> rectangles;
+  rectangles.reserve(5);
+
+  // Preserve every part of the React browser chrome that sits outside the
+  // native website rectangle (top toolbar, optional tab sidebar, and gutters).
+  AddShapeRectangle(&rectangles, 0, 0, window_width, content_y, window_width, window_height);
+  AddShapeRectangle(
+      &rectangles, 0, content_y, content_x, window_height - content_y, window_width, window_height);
+  AddShapeRectangle(&rectangles,
+                    content_x + content_width,
+                    content_y,
+                    window_width - content_x - content_width,
+                    window_height - content_y,
+                    window_width,
+                    window_height);
+  AddShapeRectangle(&rectangles,
+                    content_x,
+                    content_y + content_height,
+                    content_width,
+                    window_height - content_y - content_height,
+                    window_width,
+                    window_height);
+
+  // Keep the exposed shell area tight to the panel so the shell background
+  // cannot appear as a dark rectangle around the live website.
+  constexpr int kOverlayMargin = 0;
+  AddShapeRectangle(&rectangles,
+                    overlay_x - kOverlayMargin,
+                    overlay_y - kOverlayMargin,
+                    overlay_width + (kOverlayMargin * 2),
+                    overlay_height + (kOverlayMargin * 2),
+                    window_width,
+                    window_height);
+
+  if (rectangles.empty()) {
+    ResetWindowShape(display, window);
+    return;
+  }
+
+  for (const auto shape : {ShapeBounding, ShapeInput, ShapeClip}) {
+    XShapeCombineRectangles(display,
+                            window,
+                            shape,
+                            0,
+                            0,
+                            rectangles.data(),
+                            static_cast<int>(rectangles.size()),
+                            ShapeSet,
+                            Unsorted);
+  }
+}
+
 }  // namespace
 
 CefApplication::CefApplication(CommandChannel* channel, int argc, char* argv[])
@@ -187,6 +278,58 @@ void CefApplication::HandleCommandOnUi(const std::string& command, const std::st
     }
     return;
   }
+  if (command == "COMPUTER_OPEN") {
+    std::stringstream stream(value);
+    std::string tab_id, url;
+    std::getline(stream, tab_id, '\t');
+    std::getline(stream, url, '\t');
+    stream >> computer_x_;
+    stream.ignore(1, '\t');
+    stream >> computer_y_;
+    stream.ignore(1, '\t');
+    stream >> computer_width_;
+    stream.ignore(1, '\t');
+    stream >> computer_height_;
+    if (tab_id.empty() || computer_width_ <= 0 || computer_height_ <= 0) {
+      std::cerr << "[groubot-cef] COMPUTER_OPEN rejected: invalid tab or bounds tab="
+                << tab_id << " bounds=" << computer_x_ << "," << computer_y_
+                << " " << computer_width_ << "x" << computer_height_ << std::endl;
+      return;
+    }
+    std::cerr << "[groubot-cef] COMPUTER_OPEN tab=" << tab_id << " url=" << url
+              << " bounds=" << computer_x_ << "," << computer_y_ << " "
+              << computer_width_ << "x" << computer_height_ << std::endl;
+    computer_tab_id_ = tab_id;
+    computer_visible_ = true;
+    if (external_tabs_.find(tab_id) == external_tabs_.end()) {
+      CreateExternalTab(tab_id, url.empty() ? "https://www.google.com/" : url);
+    } else if (external_tabs_[tab_id] && !url.empty()) {
+      external_tabs_[tab_id]->GetMainFrame()->LoadURL(url);
+    }
+    EnforceTabBounds();
+    return;
+  }
+  if (command == "COMPUTER_CLOSE") {
+    std::cerr << "[groubot-cef] COMPUTER_CLOSE tab=" << computer_tab_id_ << std::endl;
+    computer_visible_ = false;
+    EnforceTabBounds();
+    return;
+  }
+  if (command == "COMPUTER_BOUNDS") {
+    std::stringstream stream(value);
+    stream >> computer_x_;
+    stream.ignore(1, '\t');
+    stream >> computer_y_;
+    stream.ignore(1, '\t');
+    stream >> computer_width_;
+    stream.ignore(1, '\t');
+    stream >> computer_height_;
+    std::cerr << "[groubot-cef] COMPUTER_BOUNDS tab=" << computer_tab_id_
+              << " bounds=" << computer_x_ << "," << computer_y_ << " "
+              << computer_width_ << "x" << computer_height_ << std::endl;
+    EnforceTabBounds();
+    return;
+  }
   auto browser = shell_browser_;
   if (active_tab_id_ != "home") {
     const auto found = external_tabs_.find(active_tab_id_);
@@ -244,9 +387,14 @@ void CefApplication::HandleCommandOnUi(const std::string& command, const std::st
 
 void CefApplication::HandleBrowserEvent(CefRefPtr<CefBrowser> browser, const std::string& event, const std::string& value) {
   CEF_REQUIRE_UI_THREAD();
+  const auto browser_id = browser_tab_ids_.find(browser ? browser->GetIdentifier() : -1);
+  const auto tab_id = browser_id == browser_tab_ids_.end()
+      ? (browser == shell_browser_ ? std::string("shell") : std::string("unknown"))
+      : browser_id->second;
   if (event == "LOAD_START" || event == "LOAD_END" || event == "LOAD_ERROR" ||
       event == "RENDER_PROCESS_TERMINATED") {
-    std::cerr << "[groubot-cef] " << event << " " << value << std::endl;
+    std::cerr << "[groubot-cef] browser-event tab=" << tab_id << " event="
+              << event << " value=" << value << std::endl;
   }
   if (event == "SHORTCUT") {
     NotifyShell("SHORTCUT", "home", value);
@@ -260,6 +408,8 @@ void CefApplication::HandleBrowserEvent(CefRefPtr<CefBrowser> browser, const std
       // as soon as it is ready instead of allowing that sibling to remain on
       // top of the new renderer.
       active_tab_id_ = "home";
+      computer_visible_ = false;
+      computer_tab_id_.clear();
       SetTabVisibility("home", true);
       channel_->Send("READY", "shell");
     } else {
@@ -274,13 +424,19 @@ void CefApplication::HandleBrowserEvent(CefRefPtr<CefBrowser> browser, const std
           &content_y,
           &content_width,
           &content_height);
-      AttachBrowserWindow(
-          browser,
-          content_x,
-          content_y,
-          content_width,
-          content_height,
-          value == active_tab_id_);
+      const bool is_computer = value == computer_tab_id_ && computer_visible_;
+      AttachBrowserWindow(browser,
+                          is_computer ? computer_x_ : content_x,
+                          is_computer ? computer_y_ : content_y,
+                          is_computer ? computer_width_ : content_width,
+                          is_computer ? computer_height_ : content_height,
+                          is_computer ? computer_visible_ : value == active_tab_id_);
+      if (value == computer_tab_id_) {
+        std::cerr << "[groubot-cef] COMPUTER_READY tab=" << value
+                  << " visible=" << (computer_visible_ ? "true" : "false")
+                  << " bounds=" << computer_x_ << "," << computer_y_ << " "
+                  << computer_width_ << "x" << computer_height_ << std::endl;
+      }
       // Popup browsers share the same native surface pool as regular web
       // tabs. They must not force themselves above the shell when Google (or
       // another site) opens an auth/helper window; visibility is owned by the
@@ -326,7 +482,35 @@ void CefApplication::HandleBrowserEvent(CefRefPtr<CefBrowser> browser, const std
   }
 }
 
-void CefApplication::HandleNativeCommand(CefRefPtr<CefBrowser>, const std::string& command, const std::string& value) {
+void CefApplication::HandleNativeCommand(CefRefPtr<CefBrowser> source,
+                                         const std::string& command,
+                                         const std::string& value) {
+  if (command == "CONTEXT_OPEN_IMAGE") {
+    if (value.rfind("http://", 0) == 0 || value.rfind("https://", 0) == 0) {
+      NotifyShell("OPEN_TAB", "shell", value);
+    }
+    return;
+  }
+  if (command == "CONTEXT_INSPECT") {
+    const auto separator = value.find('\t');
+    if (!source || separator == std::string::npos) return;
+    int x = 0;
+    int y = 0;
+    try {
+      x = std::stoi(value.substr(0, separator));
+      y = std::stoi(value.substr(separator + 1));
+    } catch (...) {
+      return;
+    }
+    CefWindowInfo window_info;
+    CefBrowserSettings settings;
+    source->GetHost()->ShowDevTools(
+        window_info,
+        source->GetHost()->GetClient(),
+        settings,
+        CefPoint(x, y));
+    return;
+  }
   if (command == "BROWSER_EVAL") {
     auto parsed = CefParseJSON(value, JSON_PARSER_RFC);
     if (parsed && parsed->GetType() == VTYPE_DICTIONARY) {
@@ -416,8 +600,71 @@ void CefApplication::HandleNativeCommand(CefRefPtr<CefBrowser>, const std::strin
     }
     return;
   }
+  if (command == "COMPUTER_OPEN") {
+    std::stringstream stream(value);
+    std::string tab_id, url;
+    std::getline(stream, tab_id, '\t');
+    std::getline(stream, url, '\t');
+    stream >> computer_x_;
+    stream.ignore(1, '\t');
+    stream >> computer_y_;
+    stream.ignore(1, '\t');
+    stream >> computer_width_;
+    stream.ignore(1, '\t');
+    stream >> computer_height_;
+    if (tab_id.empty() || computer_width_ <= 0 || computer_height_ <= 0) {
+      std::cerr << "[groubot-cef] COMPUTER_OPEN rejected: invalid tab or bounds tab="
+                << tab_id << " bounds=" << computer_x_ << "," << computer_y_
+                << " " << computer_width_ << "x" << computer_height_ << std::endl;
+      return;
+    }
+    std::cerr << "[groubot-cef] COMPUTER_OPEN tab=" << tab_id << " url=" << url
+              << " bounds=" << computer_x_ << "," << computer_y_ << " "
+              << computer_width_ << "x" << computer_height_ << std::endl;
+    computer_tab_id_ = tab_id;
+    computer_visible_ = true;
+    const auto found = external_tabs_.find(tab_id);
+    if (found == external_tabs_.end()) {
+      CreateExternalTab(tab_id, url.empty() ? "https://www.google.com/" : url);
+    } else if (found->second && !url.empty()) {
+      found->second->GetMainFrame()->LoadURL(url);
+    }
+    EnforceTabBounds();
+    return;
+  }
+  if (command == "COMPUTER_CLOSE") {
+    std::cerr << "[groubot-cef] COMPUTER_CLOSE tab=" << computer_tab_id_ << std::endl;
+    computer_visible_ = false;
+    EnforceTabBounds();
+    return;
+  }
+  if (command == "COMPUTER_BOUNDS") {
+    std::stringstream stream(value);
+    stream >> computer_x_;
+    stream.ignore(1, '\t');
+    stream >> computer_y_;
+    stream.ignore(1, '\t');
+    stream >> computer_width_;
+    stream.ignore(1, '\t');
+    stream >> computer_height_;
+    std::cerr << "[groubot-cef] COMPUTER_BOUNDS tab=" << computer_tab_id_
+              << " bounds=" << computer_x_ << "," << computer_y_ << " "
+              << computer_width_ << "x" << computer_height_ << std::endl;
+    EnforceTabBounds();
+    return;
+  }
   const auto [tab_id, payload] = SplitValue(value);
   if (command == "NAVIGATE") {
+    if (tab_id == computer_tab_id_ && computer_visible_) {
+      const auto found = external_tabs_.find(tab_id);
+      if (found != external_tabs_.end() && found->second && !payload.empty()) {
+        std::cerr << "[groubot-cef] COMPUTER_NAVIGATE tab=" << tab_id
+                  << " url=" << payload << std::endl;
+        found->second->GetMainFrame()->LoadURL(payload);
+        EnforceTabBounds();
+      }
+      return;
+    }
     active_tab_id_ = tab_id;
     if (tab_id == "home") {
       shell_browser_->GetMainFrame()->LoadURL(payload);
@@ -557,7 +804,13 @@ void CefApplication::ApplyBrowserBounds() {
   GetContentBounds(&x, &y, &width, &height);
 
   for (const auto& [tab_id, browser] : external_tabs_) {
-    AttachBrowserWindow(browser, x, y, width, height, tab_id == active_tab_id_);
+    const bool is_computer = tab_id == computer_tab_id_ && computer_visible_;
+    AttachBrowserWindow(browser,
+                        is_computer ? computer_x_ : x,
+                        is_computer ? computer_y_ : y,
+                        is_computer ? computer_width_ : width,
+                        is_computer ? computer_height_ : height,
+                        is_computer ? computer_visible_ : tab_id == active_tab_id_);
     browser->GetHost()->WasResized();
   }
 }
@@ -568,18 +821,23 @@ void CefApplication::EnforceTabBounds() {
     auto* display = XOpenDisplay(nullptr);
     if (display) {
       XWindowAttributes parent_attr{};
+      // Measure the Groubot client window itself. The window-manager frame
+      // must never be used as a resize target: resizing the client to frame
+      // dimensions creates a feedback loop where the frame grows forever.
       if (XGetWindowAttributes(display, parent_window_, &parent_attr)) {
-        if (parent_attr.width > 0 && parent_attr.height > 0 &&
-            (parent_attr.width != width_ || parent_attr.height != height_)) {
-          width_ = parent_attr.width;
-          height_ = parent_attr.height;
+        const auto screen = DefaultScreen(display);
+        // Never accept geometry larger than the physical display. A stale
+        // frame/child measurement must not be allowed to grow the host window
+        // again on every bounds pass.
+        const auto observed_width = std::clamp(parent_attr.width, 1, DisplayWidth(display, screen));
+        const auto observed_height = std::clamp(parent_attr.height, 1, DisplayHeight(display, screen));
+        if (observed_width != width_ || observed_height != height_) {
+          width_ = observed_width;
+          height_ = observed_height;
           if (shell_browser_) {
             const auto shell_handle = shell_browser_->GetHost()->GetWindowHandle();
             if (shell_handle) {
               XMoveResizeWindow(display, shell_handle, 0, 0, static_cast<unsigned>(width_), static_cast<unsigned>(height_));
-              XShapeCombineMask(display, shell_handle, ShapeBounding, 0, 0, None, ShapeSet);
-              XShapeCombineMask(display, shell_handle, ShapeInput, 0, 0, None, ShapeSet);
-              XShapeCombineMask(display, shell_handle, ShapeClip, 0, 0, None, ShapeSet);
               XClearArea(display, shell_handle, 0, 0, static_cast<unsigned>(width_), static_cast<unsigned>(height_), True);
             }
             shell_browser_->GetHost()->NotifyMoveOrResizeStarted();
@@ -595,6 +853,33 @@ void CefApplication::EnforceTabBounds() {
       int width = 0;
       int height = 0;
       GetContentBounds(&x, &y, &width, &height);
+      Window shell_handle = 0;
+      if (shell_browser_) shell_handle = shell_browser_->GetHost()->GetWindowHandle();
+      const auto active_page = external_tabs_.find(active_tab_id_);
+      const bool overlay_over_page =
+          overlay_visible_ && active_page != external_tabs_.end() && active_page->second;
+      if (shell_handle) {
+        if (overlay_over_page) {
+          ApplyOverlayWindowShape(display,
+                                  shell_handle,
+                                  width_,
+                                  height_,
+                                  x,
+                                  y,
+                                  width,
+                                  height,
+                                  overlay_x_,
+                                  overlay_y_,
+                                  overlay_width_,
+                                  overlay_height_);
+        } else {
+          ResetWindowShape(display, shell_handle);
+        }
+        XMapWindow(display, shell_handle);
+      }
+
+      Window active_page_handle = 0;
+      Window computer_handle = 0;
       for (const auto& [tab_id, tab] : external_tabs_) {
         if (tab_id.rfind("__popup_", 0) == 0 || !tab) continue;
         const auto handle = tab->GetHost()->GetWindowHandle();
@@ -604,13 +889,19 @@ void CefApplication::EnforceTabBounds() {
         Window parent = 0;
         Window* children = nullptr;
         unsigned int child_count = 0;
+        const bool is_computer = tab_id == computer_tab_id_;
+        const bool should_show = is_computer ? computer_visible_ : tab_id == active_tab_id_;
+        const int target_x = is_computer ? computer_x_ : x;
+        const int target_y = is_computer ? computer_y_ : y;
+        const int target_width = is_computer ? computer_width_ : width;
+        const int target_height = is_computer ? computer_height_ : height;
         if (XQueryTree(display, handle, &root, &parent, &children, &child_count)) {
           if (children) XFree(children);
           if (parent != parent_window_) {
-            XReparentWindow(display, handle, parent_window_, x, y);
+            XReparentWindow(display, handle, parent_window_, target_x, target_y);
             // Reparenting a mapped X11 child may map it again. Restore the
             // selected-tab invariant immediately after the reparent.
-            if (!overlay_visible_ && tab_id == active_tab_id_) {
+            if (should_show) {
               XMapWindow(display, handle);
             } else {
               XUnmapWindow(display, handle);
@@ -620,9 +911,9 @@ void CefApplication::EnforceTabBounds() {
 
         XWindowAttributes attributes{};
         if (XGetWindowAttributes(display, handle, &attributes) &&
-            (attributes.x != x || attributes.y != y ||
-             attributes.width != width || attributes.height != height)) {
-          XMoveResizeWindow(display, handle, x, y, static_cast<unsigned>(width), static_cast<unsigned>(height));
+            (attributes.x != target_x || attributes.y != target_y ||
+             attributes.width != target_width || attributes.height != target_height)) {
+            XMoveResizeWindow(display, handle, target_x, target_y, static_cast<unsigned>(target_width), static_cast<unsigned>(target_height));
           tab->GetHost()->NotifyMoveOrResizeStarted();
           tab->GetHost()->NotifyScreenInfoChanged();
           tab->GetHost()->WasResized();
@@ -631,11 +922,23 @@ void CefApplication::EnforceTabBounds() {
         // CEF may map a child while recovering a renderer or applying new
         // bounds. Keep visibility authoritative in native state rather than
         // allowing a late paint/resize to cover the React shell.
-        if (!overlay_visible_ && tab_id == active_tab_id_) {
+        if (should_show) {
           XMapWindow(display, handle);
+          if (is_computer) computer_handle = handle;
+          else active_page_handle = handle;
         } else {
           XUnmapWindow(display, handle);
         }
+      }
+
+      if (overlay_over_page && shell_handle) {
+        // The shell is clipped to chrome + overlay, so raising it leaves the
+        // live website visible everywhere else.
+        XRaiseWindow(display, shell_handle);
+      } else {
+        if (active_page_handle) XRaiseWindow(display, active_page_handle);
+        else if (shell_handle) XRaiseWindow(display, shell_handle);
+        if (computer_handle) XRaiseWindow(display, computer_handle);
       }
       XFlush(display);
       XCloseDisplay(display);
@@ -644,57 +947,44 @@ void CefApplication::EnforceTabBounds() {
   CefPostDelayedTask(TID_UI, base::BindOnce(&CefApplication::EnforceTabBounds, this), 150);
 }
 
+void CefApplication::SetComputerBounds(int x, int y, int width, int height) {
+  computer_x_ = x;
+  computer_y_ = y;
+  computer_width_ = width;
+  computer_height_ = height;
+  EnforceTabBounds();
+}
+
 void CefApplication::SetOverlayVisibility(const std::string& value) {
-  if (!parent_window_) return;
+  std::stringstream stream(value);
+  std::string state;
+  std::getline(stream, state, '\t');
+  overlay_visible_ = state == "open";
 
-  auto* display = XOpenDisplay(nullptr);
-  if (!display) return;
-
-  const auto shell_handle = shell_browser_
-      ? shell_browser_->GetHost()->GetWindowHandle()
-      : 0;
-  if (!shell_handle) {
-    XCloseDisplay(display);
-    return;
+  if (overlay_visible_) {
+    overlay_x_ = 0;
+    overlay_y_ = 0;
+    overlay_width_ = 0;
+    overlay_height_ = 0;
+    stream >> overlay_x_;
+    stream.ignore(1, '\t');
+    stream >> overlay_y_;
+    stream.ignore(1, '\t');
+    stream >> overlay_width_;
+    stream.ignore(1, '\t');
+    stream >> overlay_height_;
+    std::cerr << "[groubot-cef] overlay-open bounds=" << overlay_x_ << ","
+              << overlay_y_ << " " << overlay_width_ << "x"
+              << overlay_height_ << " page-surface-visible" << std::endl;
+  } else {
+    overlay_x_ = 0;
+    overlay_y_ = 0;
+    overlay_width_ = 0;
+    overlay_height_ = 0;
+    std::cerr << "[groubot-cef] overlay-close page-surface-visible" << std::endl;
   }
 
-  const bool open = value.rfind("open", 0) == 0;
-  if (open) {
-    overlay_visible_ = true;
-    // Browser chrome and external CEF pages are separate native surfaces.
-    // While a chrome panel is open, temporarily hide the page surface so the
-    // React shell can render the panel normally without X11 sibling-window
-    // clipping. The tab/browser itself stays alive and is restored on close.
-    for (const auto& [tab_id, tab] : external_tabs_) {
-      const auto page_handle = tab->GetHost()->GetWindowHandle();
-      if (page_handle) XUnmapWindow(display, page_handle);
-    }
-
-    XShapeCombineMask(display, shell_handle, ShapeBounding, 0, 0, None, ShapeSet);
-    XShapeCombineMask(display, shell_handle, ShapeInput, 0, 0, None, ShapeSet);
-    XShapeCombineMask(display, shell_handle, ShapeClip, 0, 0, None, ShapeSet);
-    XMapWindow(display, shell_handle);
-    XRaiseWindow(display, shell_handle);
-    XFlush(display);
-    XCloseDisplay(display);
-    std::cerr << "[groubot-cef] overlay-open page-surface-hidden" << std::endl;
-    return;
-  }
-
-  if (!open) {
-    overlay_visible_ = false;
-    // Restore the full React shell first, then restore the active website
-    // surface above the content area. No browser tab is closed or recreated.
-    XShapeCombineMask(display, shell_handle, ShapeBounding, 0, 0, None, ShapeSet);
-    XShapeCombineMask(display, shell_handle, ShapeInput, 0, 0, None, ShapeSet);
-    XShapeCombineMask(display, shell_handle, ShapeClip, 0, 0, None, ShapeSet);
-    XMapWindow(display, shell_handle);
-    XFlush(display);
-    XCloseDisplay(display);
-    SetTabVisibility(active_tab_id_, true);
-    std::cerr << "[groubot-cef] overlay-close page-surface-restored" << std::endl;
-    return;
-  }
+  EnforceTabBounds();
 }
 
 void CefApplication::LaunchIndependentWindow(const std::string& shell_url) {
@@ -794,6 +1084,13 @@ void CefApplication::SetTabVisibility(const std::string& tab_id, bool visible) {
   for (const auto& [id, browser] : external_tabs_) {
     const auto handle = browser->GetHost()->GetWindowHandle();
     if (!handle) continue;
+    // Computer is a persistent side surface, not a normal selected tab. It
+    // must remain mapped while the React chat shell or another normal tab is
+    // selected, otherwise toolbar/history updates make the panel disappear.
+    if (id == computer_tab_id_ && computer_visible_) {
+      XMapWindow(display, handle);
+      continue;
+    }
     if (id == tab_id && visible) {
       XMapWindow(display, handle);
       active_handle = handle;
@@ -814,6 +1111,17 @@ void CefApplication::SetTabVisibility(const std::string& tab_id, bool visible) {
     // show the last website (often Google Docs).
     const auto shell_handle = shell_browser_->GetHost()->GetWindowHandle();
     if (shell_handle) XRaiseWindow(display, shell_handle);
+  }
+
+  if (computer_visible_) {
+    const auto computer = external_tabs_.find(computer_tab_id_);
+    if (computer != external_tabs_.end() && computer->second) {
+      const auto handle = computer->second->GetHost()->GetWindowHandle();
+      if (handle) {
+        XMapWindow(display, handle);
+        XRaiseWindow(display, handle);
+      }
+    }
   }
 
   XFlush(display);

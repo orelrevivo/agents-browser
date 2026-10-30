@@ -28,12 +28,7 @@ import {
   type Conversation,
   type ConversationWithMessages,
 } from "./chats.js";
-import {
-  memoryIdSchema,
-  memoryInputSchema,
-  type Memory,
-  type MemoryInput,
-} from "./memories.js";
+import { memoryIdSchema, memoryInputSchema, type Memory, type MemoryInput } from "./memories.js";
 import {
   browserTaskCreateSchema,
   browserTaskIdSchema,
@@ -44,12 +39,7 @@ import {
   type BrowserTaskProgress,
   type BrowserTaskStatus,
 } from "./tasks.js";
-import {
-  skillIdSchema,
-  skillInputSchema,
-  type Skill,
-  type SkillInput,
-} from "./skills.js";
+import { skillIdSchema, skillInputSchema, type Skill, type SkillInput } from "./skills.js";
 import {
   agentGroupInputSchema,
   agentGroupUpdateSchema,
@@ -123,10 +113,7 @@ function openDatabase(databasePath: string): Database.Database {
   return new Database(databasePath);
 }
 
-export function createAgentGroupRepository(
-  databasePath: string,
-  migrationsFolder: string,
-) {
+export function createAgentGroupRepository(databasePath: string, migrationsFolder: string) {
   const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   const db = drizzle(sqlite);
@@ -149,12 +136,7 @@ export function createAgentGroupRepository(
 
   return {
     list(): AgentGroup[] {
-      return db
-        .select()
-        .from(agentGroups)
-        .orderBy(desc(agentGroups.updatedAt))
-        .all()
-        .map(toGroup);
+      return db.select().from(agentGroups).orderBy(desc(agentGroups.updatedAt)).all().map(toGroup);
     },
     get(id: string): AgentGroup | undefined {
       const row = db
@@ -207,9 +189,7 @@ export function createAgentGroupRepository(
     },
     remove(id: string): void {
       const groupId = groupIdSchema.parse(id);
-      db.delete(agentGroupMembers)
-        .where(eq(agentGroupMembers.groupId, groupId))
-        .run();
+      db.delete(agentGroupMembers).where(eq(agentGroupMembers.groupId, groupId)).run();
       db.delete(agentGroups).where(eq(agentGroups.id, groupId)).run();
     },
     close(): void {
@@ -218,10 +198,7 @@ export function createAgentGroupRepository(
   };
 }
 
-export function createAgentRepository(
-  databasePath: string,
-  migrationsFolder: string,
-) {
+export function createAgentRepository(databasePath: string, migrationsFolder: string) {
   const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
@@ -240,8 +217,7 @@ export function createAgentRepository(
       const valid = agentInputSchema.parse(input);
       const now = Date.now();
       const id = randomUUID();
-      const isFirstAgent =
-        db.select({ id: agents.id }).from(agents).limit(1).get() === undefined;
+      const isFirstAgent = db.select({ id: agents.id }).from(agents).limit(1).get() === undefined;
       db.insert(agents)
         .values(toRow(id, valid, isFirstAgent, now))
         .run();
@@ -316,10 +292,7 @@ export function createAgentRepository(
       const target = this.get(id);
       if (!target) throw new Error("Agent not found");
       db.transaction((tx) => {
-        tx.update(agents)
-          .set({ isDefault: false })
-          .where(ne(agents.id, id))
-          .run();
+        tx.update(agents).set({ isDefault: false }).where(ne(agents.id, id)).run();
         tx.update(agents)
           .set({ isDefault: true, updatedAt: new Date() })
           .where(eq(agents.id, id))
@@ -342,10 +315,7 @@ export function createAgentRepository(
   };
 }
 
-export function createChatRepository(
-  databasePath: string,
-  migrationsFolder: string,
-) {
+export function createChatRepository(databasePath: string, migrationsFolder: string) {
   const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
@@ -480,11 +450,7 @@ export function createChatRepository(
       metadata: ChatMessageMetadata;
     }): ChatMessage {
       const conversationId = conversationIdSchema.parse(input.conversationId);
-      const message = db
-        .select()
-        .from(messages)
-        .where(eq(messages.id, input.messageId))
-        .get();
+      const message = db.select().from(messages).where(eq(messages.id, input.messageId)).get();
       if (!message || message.conversationId !== conversationId)
         throw new Error("Message not found");
       db.transaction((tx) => {
@@ -497,9 +463,7 @@ export function createChatRepository(
           .where(eq(conversations.id, conversationId))
           .run();
       });
-      return toMessage(
-        db.select().from(messages).where(eq(messages.id, input.messageId)).get()!,
-      );
+      return toMessage(db.select().from(messages).where(eq(messages.id, input.messageId)).get()!);
     },
     rename(input: { id: string; title: string }): Conversation {
       const valid = renameConversationSchema.parse(input);
@@ -515,10 +479,7 @@ export function createChatRepository(
       if (!conversation) throw new Error("Conversation not found");
       return toConversation(conversation);
     },
-    setPermissionMode(
-      id: string,
-      permissionMode: "ask" | "full",
-    ): Conversation {
+    setPermissionMode(id: string, permissionMode: "ask" | "full"): Conversation {
       const validId = conversationIdSchema.parse(id);
       const validMode = permissionModeSchema.parse(permissionMode);
       db.update(conversations)
@@ -569,10 +530,7 @@ export function createChatRepository(
   };
 }
 
-export function createMemoryRepository(
-  databasePath: string,
-  migrationsFolder: string,
-) {
+export function createMemoryRepository(databasePath: string, migrationsFolder: string) {
   const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
@@ -620,16 +578,14 @@ export function createMemoryRepository(
         .map((memory) => ({
           memory,
           score: terms.reduce(
-            (score, term) =>
-              score + (memory.content.toLowerCase().includes(term) ? 1 : 0),
+            (score, term) => score + (memory.content.toLowerCase().includes(term) ? 1 : 0),
             0,
           ),
         }))
         .filter((entry) => entry.score > 0)
         .sort(
           (left, right) =>
-            right.score - left.score ||
-            right.memory.updatedAt - left.memory.updatedAt,
+            right.score - left.score || right.memory.updatedAt - left.memory.updatedAt,
         )
         .slice(0, limit)
         .map((entry) => entry.memory);
@@ -640,10 +596,7 @@ export function createMemoryRepository(
   };
 }
 
-export function createAutomationRepository(
-  databasePath: string,
-  migrationsFolder: string,
-) {
+export function createAutomationRepository(databasePath: string, migrationsFolder: string) {
   const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   const db = drizzle(sqlite);
@@ -743,9 +696,7 @@ export function createAutomationRepository(
       return this.get(validId)!;
     },
     due(now = Date.now()): AutomationTask[] {
-      return this.list().filter(
-        (task) => task.status === "active" && task.nextRunAt <= now,
-      );
+      return this.list().filter((task) => task.status === "active" && task.nextRunAt <= now);
     },
     remove(id: string): void {
       db.delete(automationTasks)
@@ -758,25 +709,16 @@ export function createAutomationRepository(
   };
 }
 
-export function createBrowserTaskRepository(
-  databasePath: string,
-  migrationsFolder: string,
-) {
+export function createBrowserTaskRepository(databasePath: string, migrationsFolder: string) {
   const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
   const db = drizzle(sqlite);
   return {
     list(conversationId?: string): BrowserTask[] {
-      const rows = db
-        .select()
-        .from(browserTasks)
-        .orderBy(desc(browserTasks.updatedAt))
-        .all();
+      const rows = db.select().from(browserTasks).orderBy(desc(browserTasks.updatedAt)).all();
       return rows
-        .filter(
-          (row) => !conversationId || row.conversationId === conversationId,
-        )
+        .filter((row) => !conversationId || row.conversationId === conversationId)
         .map(toBrowserTask);
     },
     get(id: string): BrowserTask | undefined {
@@ -822,8 +764,7 @@ export function createBrowserTaskRepository(
       const current = this.get(validId);
       if (!current) throw new Error("Browser task not found");
       if (input.status) browserTaskStatusSchema.parse(input.status);
-      if (input.progress)
-        input.progress.forEach((item) => browserTaskProgressSchema.parse(item));
+      if (input.progress) input.progress.forEach((item) => browserTaskProgressSchema.parse(item));
       db.update(browserTasks)
         .set({
           status: input.status ?? current.status,
@@ -848,10 +789,7 @@ export function createBrowserTaskRepository(
   };
 }
 
-export function createSkillRepository(
-  databasePath: string,
-  migrationsFolder: string,
-) {
+export function createSkillRepository(databasePath: string, migrationsFolder: string) {
   const sqlite = openDatabase(databasePath);
   sqlite.pragma("journal_mode = WAL");
   migrate(drizzle(sqlite), { migrationsFolder });
@@ -859,12 +797,7 @@ export function createSkillRepository(
 
   return {
     list(): Skill[] {
-      return db
-        .select()
-        .from(skills)
-        .orderBy(desc(skills.updatedAt))
-        .all()
-        .map(toSkill);
+      return db.select().from(skills).orderBy(desc(skills.updatedAt)).all().map(toSkill);
     },
     create(input: SkillInput): Skill {
       const valid = skillInputSchema.parse(input);
@@ -963,7 +896,8 @@ function toAutomationTask(row: typeof automationTasks.$inferSelect): AutomationT
   let agentIds: string[] = [];
   try {
     const parsed = JSON.parse(row.agentIds);
-    if (Array.isArray(parsed)) agentIds = parsed.filter((id): id is string => typeof id === "string");
+    if (Array.isArray(parsed))
+      agentIds = parsed.filter((id): id is string => typeof id === "string");
   } catch {
     agentIds = [];
   }
@@ -999,9 +933,7 @@ function toSkill(row: typeof skills.$inferSelect): Skill {
 }
 function createConversationTitle(content: string) {
   const normalized = content.replace(/\s+/g, " ").trim();
-  return normalized.length > 56
-    ? `${normalized.slice(0, 56).trimEnd()}…`
-    : normalized;
+  return normalized.length > 56 ? `${normalized.slice(0, 56).trimEnd()}…` : normalized;
 }
 
 function toRow(
@@ -1075,10 +1007,7 @@ function parseBooleanRecord(value: string): Record<string, boolean> {
 function parseJsonArray(value: string): string[] {
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) &&
-      parsed.every((item) => typeof item === "string")
-      ? parsed
-      : [];
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
   } catch {
     return [];
   }

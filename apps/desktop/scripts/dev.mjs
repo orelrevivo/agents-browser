@@ -1,5 +1,14 @@
 import { execFileSync, spawn } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, readdirSync, readlinkSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { parse as parseDotenv } from "dotenv";
 import { createServer } from "vite";
@@ -21,7 +30,9 @@ function acquireLauncherLock() {
         process.kill(previousPid, 0);
         return false;
       } catch {
-        try { unlinkSync(lockPath); } catch {}
+        try {
+          unlinkSync(lockPath);
+        } catch {}
         return acquireLauncherLock();
       }
     }
@@ -30,11 +41,18 @@ function acquireLauncherLock() {
 }
 function envFileHasValue(name) {
   try {
-    const line = readFileSync(resolve(workspaceRoot, ".env"), "utf8").split(/\r?\n/).find((item) => new RegExp(`^\\s*${name}\\s*=`).test(item));
+    const line = readFileSync(resolve(workspaceRoot, ".env"), "utf8")
+      .split(/\r?\n/)
+      .find((item) => new RegExp(`^\\s*${name}\\s*=`).test(item));
     if (!line) return false;
-    const value = line.slice(line.indexOf("=") + 1).trim().replace(/^['"]|['"]$/g, "");
+    const value = line
+      .slice(line.indexOf("=") + 1)
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
     return value.length > 0;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 function findBackendPids() {
@@ -43,18 +61,32 @@ function findBackendPids() {
     .flatMap((entry) => {
       try {
         const command = readFileSync(`/proc/${entry.name}/cmdline`, "utf8").replaceAll("\0", " ");
-        return command.includes("/packages/backend/") && command.includes("src/server.ts") ? [Number(entry.name)] : [];
-      } catch { return []; }
+        return command.includes("/packages/backend/") && command.includes("src/server.ts")
+          ? [Number(entry.name)]
+          : [];
+      } catch {
+        return [];
+      }
     });
 }
 
 function backendProcessGroupId(pid) {
-  try { return Number(readFileSync(`/proc/${pid}/stat`, "utf8").trim().split(" ")[4]); } catch { return 0; }
+  try {
+    return Number(readFileSync(`/proc/${pid}/stat`, "utf8").trim().split(" ")[4]);
+  } catch {
+    return 0;
+  }
 }
 
 function stopStaleBackend() {
-  for (const group of new Set(findBackendPids().map(backendProcessGroupId).filter((value) => value > 0))) {
-    try { process.kill(-group, "SIGTERM"); } catch {}
+  for (const group of new Set(
+    findBackendPids()
+      .map(backendProcessGroupId)
+      .filter((value) => value > 0),
+  )) {
+    try {
+      process.kill(-group, "SIGTERM");
+    } catch {}
   }
 }
 if (!acquireLauncherLock()) {
@@ -62,27 +94,41 @@ if (!acquireLauncherLock()) {
   process.exit(0);
 }
 const backendEnvironment = {
-  ...(() => { try { return parseDotenv(readFileSync(resolve(workspaceRoot, ".env"), "utf8")); } catch { return {}; } })(),
+  ...(() => {
+    try {
+      return parseDotenv(readFileSync(resolve(workspaceRoot, ".env"), "utf8"));
+    } catch {
+      return {};
+    }
+  })(),
   ...process.env,
   GROUBOT_BACKEND_PORT: String(backendPort),
-  GROUBOT_DATABASE_PATH: process.env.GROUBOT_DATABASE_PATH ?? resolve(root, ".groubot", "groubot.db"),
-  GROUBOT_MIGRATIONS_FOLDER: process.env.GROUBOT_MIGRATIONS_FOLDER ?? resolve(workspaceRoot, "packages/db/drizzle"),
+  GROUBOT_DATABASE_PATH:
+    process.env.GROUBOT_DATABASE_PATH ?? resolve(root, ".groubot", "groubot.db"),
+  GROUBOT_MIGRATIONS_FOLDER:
+    process.env.GROUBOT_MIGRATIONS_FOLDER ?? resolve(workspaceRoot, "packages/db/drizzle"),
 };
 let backend = null;
 let backendOwned = false;
 let backendReady = false;
 async function backendAlreadyRunning() {
   try {
-    const response = await fetch(`http://127.0.0.1:${backendPort}/health`, { signal: AbortSignal.timeout(500) });
+    const response = await fetch(`http://127.0.0.1:${backendPort}/health`, {
+      signal: AbortSignal.timeout(500),
+    });
     if (!response.ok) return false;
     const body = await response.json();
     if (body?.ok !== true || body.apiVersion !== 9 || body.groupFanout !== true) {
-      console.log("Existing Groubot backend is outdated; restarting it for automation task support.");
+      console.log(
+        "Existing Groubot backend is outdated; restarting it for automation task support.",
+      );
       stopStaleBackend();
       await new Promise((resolveWait) => setTimeout(resolveWait, 500));
       return false;
     }
-    const configResponse = await fetch(`http://127.0.0.1:${backendPort}/api/ai/config`, { signal: AbortSignal.timeout(500) });
+    const configResponse = await fetch(`http://127.0.0.1:${backendPort}/api/ai/config`, {
+      signal: AbortSignal.timeout(500),
+    });
     const config = await configResponse.json();
     const expectedKey = Boolean(process.env.OPENAI_API_KEY) || envFileHasValue("OPENAI_API_KEY");
     const expectedModel = process.env.OPENAI_MODEL || "gpt-5.6-luna";
@@ -116,21 +162,27 @@ async function backendAlreadyRunning() {
     });
 
     if (groupsResponse.status === 404) {
-      console.log("Existing Groubot backend is missing agent groups; restarting it for the current API.");
+      console.log(
+        "Existing Groubot backend is missing agent groups; restarting it for the current API.",
+      );
       stopStaleBackend();
       await new Promise((resolveWait) => setTimeout(resolveWait, 500));
       return false;
     }
 
     if (!groupsResponse.ok) {
-      console.log("Existing Groubot backend failed the groups API compatibility check; restarting it.");
+      console.log(
+        "Existing Groubot backend failed the groups API compatibility check; restarting it.",
+      );
       stopStaleBackend();
       await new Promise((resolveWait) => setTimeout(resolveWait, 500));
       return false;
     }
 
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 const backendStartup = (async () => {
@@ -139,11 +191,19 @@ const backendStartup = (async () => {
     console.log(`Groubot backend already running on 127.0.0.1:${backendPort}; reusing it.`);
     return;
   }
-  backend = spawn("pnpm", ["--filter", "@groubot/backend", "exec", "tsx", "src/server.ts"], { cwd: workspaceRoot, env: backendEnvironment, stdio: ["ignore", "pipe", "inherit"], detached: process.platform !== "win32" });
+  backend = spawn("pnpm", ["--filter", "@groubot/backend", "exec", "tsx", "src/server.ts"], {
+    cwd: workspaceRoot,
+    env: backendEnvironment,
+    stdio: ["ignore", "pipe", "inherit"],
+    detached: process.platform !== "win32",
+  });
   backendOwned = true;
   await new Promise((resolveBackend, rejectBackend) => {
     let output = "";
-    const timer = setTimeout(() => rejectBackend(new Error(`Backend did not start on port ${backendPort}.`)), 15_000);
+    const timer = setTimeout(
+      () => rejectBackend(new Error(`Backend did not start on port ${backendPort}.`)),
+      15_000,
+    );
     backend.stdout.on("data", (chunk) => {
       output += String(chunk);
       for (const line of output.split("\n").slice(0, -1)) {
@@ -170,9 +230,14 @@ try {
   await backendStartup;
 } catch (error) {
   if (backendOwned && backend) {
-    try { if (backend.pid && process.platform !== "win32") process.kill(-backend.pid, "SIGTERM"); else backend.kill("SIGTERM"); } catch {}
+    try {
+      if (backend.pid && process.platform !== "win32") process.kill(-backend.pid, "SIGTERM");
+      else backend.kill("SIGTERM");
+    } catch {}
   }
-  try { unlinkSync(lockPath); } catch {}
+  try {
+    unlinkSync(lockPath);
+  } catch {}
   throw error;
 }
 execFileSync(process.execPath, [resolve(root, "scripts/generate-agent-assets.mjs")], {
@@ -180,24 +245,41 @@ execFileSync(process.execPath, [resolve(root, "scripts/generate-agent-assets.mjs
   stdio: "inherit",
 });
 
-const vite = await createServer({ configFile: resolve(root, "vite.renderer.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+const vite = await createServer({
+  configFile: resolve(root, "vite.renderer.config.ts"),
+  server: { host: "127.0.0.1", port: 0 },
+});
 await vite.listen();
 const address = vite.httpServer.address();
 const port = typeof address === "object" && address ? address.port : 5173;
-const cefRoot = process.env.GROUBOT_CEF_ROOT ?? resolve(workspaceRoot, ".groubot", "cef-sdk", "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_linux64_minimal");
+const cefRoot =
+  process.env.GROUBOT_CEF_ROOT ??
+  resolve(
+    workspaceRoot,
+    ".groubot",
+    "cef-sdk",
+    "cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_linux64_minimal",
+  );
 if (!cefRoot) {
   console.error("GROUBOT_CEF_ROOT is required. Point it to the tested CEF 156 distribution.");
   await vite.close();
   process.exit(1);
 }
-const buildDir = process.env.GROUBOT_CEF_BUILD ?? resolve(workspaceRoot, ".groubot", "cef-host-build");
+const buildDir =
+  process.env.GROUBOT_CEF_BUILD ?? resolve(workspaceRoot, ".groubot", "cef-host-build");
 const executable = resolve(buildDir, "Release/groubot-cef-host");
+const cefRootCache = resolve(root, ".groubot/cef-root-cache");
+const cefProfile = resolve(cefRootCache, "profile");
 function nativeSourcesAreNewer() {
   try {
     const built = statSync(executable).mtimeMs;
     const sourceDir = resolve(workspaceRoot, "packages/browser/native/src");
-    return readdirSync(sourceDir).some((name) => statSync(resolve(sourceDir, name)).mtimeMs > built);
-  } catch { return false; }
+    return readdirSync(sourceDir).some(
+      (name) => statSync(resolve(sourceDir, name)).mtimeMs > built,
+    );
+  } catch {
+    return false;
+  }
 }
 if (!existsSync(executable) || nativeSourcesAreNewer()) {
   console.log("CEF host is not built; building it in the persistent project directory…");
@@ -209,7 +291,9 @@ if (!existsSync(executable) || nativeSourcesAreNewer()) {
     });
   } catch (error) {
     await vite.close().catch(() => undefined);
-    try { unlinkSync(lockPath); } catch {}
+    try {
+      unlinkSync(lockPath);
+    } catch {}
     throw new Error(
       `CEF host could not be built. Install/extract the CEF 156 SDK and set ` +
         `GROUBOT_CEF_ROOT to its cef_binary_156 distribution, then run ` +
@@ -222,7 +306,16 @@ function findHostPids() {
     .filter((entry) => entry.isDirectory() && /^\d+$/.test(entry.name))
     .flatMap((entry) => {
       try {
-        return readlinkSync(`/proc/${entry.name}/exe`) === executable ? [Number(entry.name)] : [];
+        const pid = Number(entry.name);
+        const command = readFileSync(`/proc/${pid}/cmdline`, "utf8").replaceAll("\0", " ");
+        // Chromium subprocesses can have a different /proc/exe after CEF
+        // launches them. Match the complete host tree by command line so a
+        // stale renderer/utility process cannot keep the profile locked.
+        return command.includes(executable) &&
+          (command.includes(`--profile=${cefProfile}`) ||
+            command.includes(`--user-data-dir=${cefRootCache}`))
+          ? [pid]
+          : [];
       } catch {
         return [];
       }
@@ -242,20 +335,41 @@ function terminateHostProcessGroups(signal) {
   const hostPids = findHostPids();
   const groups = new Set(hostPids.map(processGroupId).filter((group) => group > 0));
   for (const group of groups) {
-    try { process.kill(-group, signal); } catch {}
+    try {
+      process.kill(-group, signal);
+    } catch {}
   }
   // Hosts launched by an older desktop process can be re-parented into a
   // different session, so their process group is no longer reachable from
   // this launcher. Kill the executable itself as a safe fallback; the host
   // executable is the exact one we are about to launch.
   for (const pid of hostPids) {
-    try { process.kill(pid, signal); } catch {}
+    try {
+      process.kill(pid, signal);
+    } catch {}
   }
 }
 
-terminateHostProcessGroups("SIGTERM");
-await new Promise((resolveWait) => setTimeout(resolveWait, 400));
-terminateHostProcessGroups("SIGKILL");
+async function stopExistingHosts() {
+  terminateHostProcessGroups("SIGTERM");
+  const gracefulDeadline = Date.now() + 2_500;
+  while (findHostPids().length > 0 && Date.now() < gracefulDeadline) {
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  if (findHostPids().length > 0) {
+    terminateHostProcessGroups("SIGKILL");
+    const forceDeadline = Date.now() + 2_000;
+    while (findHostPids().length > 0 && Date.now() < forceDeadline) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    }
+  }
+  const remaining = findHostPids();
+  if (remaining.length > 0) {
+    throw new Error(
+      `Cannot safely start CEF: existing host processes still own the profile (${remaining.join(", ")}).`,
+    );
+  }
+}
 
 function cleanStaleProfileArtifacts(dir) {
   try {
@@ -269,36 +383,62 @@ function cleanStaleProfileArtifacts(dir) {
         entry.name.startsWith("Singleton") ||
         (entry.name.endsWith("-journal") && statSync(full).size === 0)
       ) {
-        try { unlinkSync(full); } catch {}
+        try {
+          unlinkSync(full);
+        } catch {}
       }
     }
   } catch {}
 }
-const cefRootCache = resolve(root, ".groubot/cef-root-cache");
-const cefProfile = resolve(cefRootCache, "profile");
+await stopExistingHosts();
+// Only remove Chromium's lock artifacts after every host process has exited.
+// Deleting these while a host is alive makes a second host believe it owns the
+// profile and causes the native “Profile error occurred” dialog.
+cleanStaleProfileArtifacts(cefRootCache);
 cleanStaleProfileArtifacts(cefProfile);
-const child = spawn(executable, [
-  `--url=http://127.0.0.1:${port}/`,
-  // CEF requires each request context cache_path to be inside root_cache_path.
-  `--root-cache=${cefRootCache}`,
-  `--profile=${cefProfile}`,
-  `--resources=${resolve(cefRoot, "Resources")}`,
-  `--locales=${resolve(cefRoot, "Resources/locales")}`,
-], { cwd: resolve(cefRoot, "Release"), stdio: "inherit", env: process.env, detached: process.platform !== "win32" });
+const child = spawn(
+  executable,
+  [
+    `--url=http://127.0.0.1:${port}/`,
+    // CEF requires each request context cache_path to be inside root_cache_path.
+    `--root-cache=${cefRootCache}`,
+    `--profile=${cefProfile}`,
+    `--resources=${resolve(cefRoot, "Resources")}`,
+    `--locales=${resolve(cefRoot, "Resources/locales")}`,
+  ],
+  {
+    cwd: resolve(cefRoot, "Release"),
+    stdio: "inherit",
+    env: process.env,
+    detached: process.platform !== "win32",
+  },
+);
 child.once("error", (error) => {
   console.error(`Unable to start the CEF host: ${error.message}`);
   void shutdown(1);
 });
 const shutdown = async (code = 0) => {
-  try { if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGTERM"); else child.kill("SIGTERM"); } catch {}
+  try {
+    if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGTERM");
+    else child.kill("SIGTERM");
+  } catch {}
   if (backendOwned && backend) {
-    try { if (backend.pid && process.platform !== "win32") process.kill(-backend.pid, "SIGTERM"); else backend.kill("SIGTERM"); } catch {}
+    try {
+      if (backend.pid && process.platform !== "win32") process.kill(-backend.pid, "SIGTERM");
+      else backend.kill("SIGTERM");
+    } catch {}
   }
   await vite.close();
-  try { unlinkSync(lockPath); } catch {}
+  try {
+    unlinkSync(lockPath);
+  } catch {}
   process.exit(code);
 };
-process.once("exit", () => { try { unlinkSync(lockPath); } catch {} });
+process.once("exit", () => {
+  try {
+    unlinkSync(lockPath);
+  } catch {}
+});
 process.once("SIGINT", () => void shutdown());
 process.once("SIGTERM", () => void shutdown());
 child.once("exit", (code, signal) => void shutdown(code ?? (signal ? 1 : 0)));

@@ -1,13 +1,6 @@
 import type { ChatMessage, ChatQuestion } from "@groubot/db";
 import { useEffect, useRef, useState } from "react";
-import {
-  Check,
-  Copy,
-  LoaderCircle,
-  MoreHorizontal,
-  Reply,
-  Smile,
-} from "lucide-react";
+import { Check, Copy, LoaderCircle, MoreHorizontal, Reply, Smile } from "lucide-react";
 import {
   Button,
   DropdownMenu,
@@ -72,10 +65,7 @@ export function ChatMessageList({
             >
               {message.role === "assistant" && (
                 <AgentAvatar
-                  agent={
-                    agents.find((candidate) => candidate.id === message.agentId) ??
-                    agent
-                  }
+                  agent={agents.find((candidate) => candidate.id === message.agentId) ?? agent}
                   size="sm"
                   status={streaming ? "working" : undefined}
                 />
@@ -88,7 +78,12 @@ export function ChatMessageList({
                 >
                   {message.metadata?.type === "reply" && (
                     <div className="mb-3 border-l-2 border-current/35 pl-3 text-xs opacity-75">
-                      <p className="font-medium">Replying to {message.metadata.replyTo.role === "assistant" ? "the assistant" : "your message"}</p>
+                      <p className="font-medium">
+                        Replying to{" "}
+                        {message.metadata.replyTo.role === "assistant"
+                          ? "the assistant"
+                          : "your message"}
+                      </p>
                       <p className="mt-0.5 line-clamp-2">{message.metadata.replyTo.content}</p>
                     </div>
                   )}
@@ -116,13 +111,18 @@ export function ChatMessageList({
                   })}
                 </time>
                 {Object.entries(message.metadata?.reactions ?? {}).length > 0 && (
-                  <div className={`mt-1 flex flex-wrap gap-1 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`mt-1 flex flex-wrap gap-1 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
                     {Object.entries(message.metadata?.reactions ?? {}).map(([emoji, count]) => (
                       <span
                         className="rounded-full border border-border/70 bg-card px-2 py-0.5 text-xs shadow-sm"
                         key={emoji}
                       >
-                        {emoji} {count > 1 && <span className="text-[10px] text-muted-foreground">{count}</span>}
+                        {emoji}{" "}
+                        {count > 1 && (
+                          <span className="text-[10px] text-muted-foreground">{count}</span>
+                        )}
                       </span>
                     ))}
                   </div>
@@ -160,7 +160,10 @@ export function ChatMessageList({
         )}
         {!streaming && skillActivity && (
           <div className="flex gap-3">
-            <AgentAvatar agent={agent} size="sm" />
+            <AgentAvatar
+              agent={agent}
+              size="sm"
+            />
             <ChatExecutionStatus
               detail="This saved skill was used for the completed request. Private hidden reasoning is not displayed."
               kind="skill"
@@ -201,11 +204,20 @@ function MessageActions({
     >
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button aria-label="More message actions" className="size-7 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground" size="icon" variant="ghost">
+          <Button
+            aria-label="More message actions"
+            className="size-7 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+            size="icon"
+            variant="ghost"
+          >
             <MoreHorizontal className="size-3.5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align={isUser ? "start" : "end"} side="bottom" sideOffset={5}>
+        <DropdownMenuContent
+          align={isUser ? "start" : "end"}
+          side="bottom"
+          sideOffset={5}
+        >
           <DropdownMenuItem onClick={() => onReply?.(message)}>
             <Reply className="size-3.5" /> Reply
           </DropdownMenuItem>
@@ -223,13 +235,26 @@ function MessageActions({
       >
         <Reply className="size-3.5" />
       </Button>
-      <Popover onOpenChange={setReactionOpen} open={reactionOpen}>
+      <Popover
+        onOpenChange={setReactionOpen}
+        open={reactionOpen}
+      >
         <PopoverTrigger asChild>
-          <Button aria-label="Add emoji reaction" className="size-7 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground" size="icon" variant="ghost">
+          <Button
+            aria-label="Add emoji reaction"
+            className="size-7 rounded-md bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+            size="icon"
+            variant="ghost"
+          >
             <Smile className="size-3.5" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align={isUser ? "start" : "end"} className="w-auto rounded-xl p-2" side="top" sideOffset={8}>
+        <PopoverContent
+          align={isUser ? "start" : "end"}
+          className="w-auto rounded-xl p-2"
+          side="top"
+          sideOffset={8}
+        >
           <div className="flex items-center gap-1">
             {reactionChoices.map((emoji) => (
               <button
@@ -261,9 +286,8 @@ function QuestionCard({
   answered?: ChatMessage;
   onSubmit?: (question: ChatQuestion, answers: Record<string, string>) => Promise<boolean>;
 }) {
-  const savedAnswers = answered?.metadata?.type === "question_answer"
-    ? answered.metadata.answers
-    : undefined;
+  const savedAnswers =
+    answered?.metadata?.type === "question_answer" ? answered.metadata.answers : undefined;
   const [answers, setAnswers] = useState<Record<string, string>>(savedAnswers ?? {});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -301,10 +325,16 @@ function QuestionCard({
     <div className="mt-4 min-w-[min(22rem,70vw)] space-y-4 border-t border-border/60 pt-4">
       <div className="space-y-3">
         {question.questions.map((item, index) => (
-          <fieldset className="space-y-2" key={item.id}>
-            {question.questions.length > 1 && <legend className="text-xs font-medium text-foreground">
-              {question.questions.length > 1 ? `${index + 1}. ` : ""}{item.prompt}
-            </legend>}
+          <fieldset
+            className="space-y-2"
+            key={item.id}
+          >
+            {question.questions.length > 1 && (
+              <legend className="text-xs font-medium text-foreground">
+                {question.questions.length > 1 ? `${index + 1}. ` : ""}
+                {item.prompt}
+              </legend>
+            )}
             <div className="grid gap-1.5">
               {item.options.map((option) => {
                 const selected = answers[item.id] === option.id;
@@ -316,7 +346,9 @@ function QuestionCard({
                     onClick={() => setAnswers((current) => ({ ...current, [item.id]: option.id }))}
                     type="button"
                   >
-                    <span className={`flex size-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>
+                    <span
+                      className={`flex size-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}
+                    >
                       {selected && <Check className="size-2.5" />}
                     </span>
                     {option.label}
@@ -371,21 +403,31 @@ function getQuestionMessageContent(message: ChatMessage): string {
 function getQuestionFromText(content: string): Omit<ChatQuestion, "id"> | undefined {
   const normalized = content.trim();
   const optionPrefix = /^\s*(?:[-*•]|[A-Z][.)]|\d+[.)]|[⚪○◯🔘🔴🟢🔵])\s*/u;
-  const lines = normalized.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   const options = lines
     .map((line) => (optionPrefix.test(line) ? line.replace(optionPrefix, "") : undefined))
-    .map((label) => label?.replace(/\*\*/g, "").replace(/^[⚪○◯🔘🔴🟢🔵]\s*/u, "").trim())
+    .map((label) =>
+      label
+        ?.replace(/\*\*/g, "")
+        .replace(/^[⚪○◯🔘🔴🟢🔵]\s*/u, "")
+        .trim(),
+    )
     .filter((label): label is string => Boolean(label))
     .map((label, index) => ({ id: `option-${index + 1}`, label }));
   if (options.length < 2) return undefined;
 
   const questionMatch = normalized.match(/([^\n.!?]{5,}\?)/);
   const nonOptionLines = lines.filter((line) => !optionPrefix.test(line));
-  const prompt = questionMatch?.[1]?.replace(/\*\*/g, "").trim() ?? nonOptionLines.at(-1) ?? "Choose an option.";
+  const prompt =
+    questionMatch?.[1]?.replace(/\*\*/g, "").trim() ?? nonOptionLines.at(-1) ?? "Choose an option.";
   const firstLine = nonOptionLines[0];
-  const title = firstLine && !firstLine.includes("?")
-    ? firstLine.replace(/\*\*/g, "").trim()
-    : "A quick question";
+  const title =
+    firstLine && !firstLine.includes("?")
+      ? firstLine.replace(/\*\*/g, "").trim()
+      : "A quick question";
   return {
     title,
     prompt,

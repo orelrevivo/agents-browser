@@ -4,10 +4,7 @@ export const skillIdSchema = z.string().uuid();
 
 export const skillInputSchema = z.object({
   name: z.string().trim().min(1, "Give the skill a name.").max(80),
-  description: z
-    .string()
-    .trim()
-    .max(240, "Keep the description under 240 characters."),
+  description: z.string().trim().max(240, "Keep the description under 240 characters."),
   content: z.string().trim().min(1, "Add the skill instructions."),
   creator: z.string().trim().min(1).max(80).default("You"),
   source: z.enum(["manual", "file", "github"]),

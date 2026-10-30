@@ -83,9 +83,7 @@ export function ChatSidebar({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [latestMessages, setLatestMessages] = useState<Record<string, string>>({});
-  const visibleConversations = conversations.filter(
-    (conversation) => !conversation.groupId,
-  );
+  const visibleConversations = conversations.filter((conversation) => !conversation.groupId);
   const sortedConversations = [...visibleConversations].sort((left, right) => {
     const leftPinned = agents.find((agent) => agent.id === left.agentId)?.isPinned ? 1 : 0;
     const rightPinned = agents.find((agent) => agent.id === right.agentId)?.isPinned ? 1 : 0;
@@ -124,8 +122,7 @@ export function ChatSidebar({
   useEffect(() => {
     loadGroups();
     window.addEventListener("groubot:groups-changed", loadGroups);
-    return () =>
-      window.removeEventListener("groubot:groups-changed", loadGroups);
+    return () => window.removeEventListener("groubot:groups-changed", loadGroups);
   }, []);
 
   return (
@@ -135,8 +132,8 @@ export function ChatSidebar({
       <div
         className={`flex h-14 shrink-0 items-center border-b border-border/40 ${collapsed ? "justify-center px-1" : "justify-between px-3.5"}`}
       >
-        {!collapsed && (
-          searchOpen ? (
+        {!collapsed &&
+          (searchOpen ? (
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <Input
@@ -155,8 +152,7 @@ export function ChatSidebar({
             </div>
           ) : (
             <span className="text-sm font-semibold tracking-tight">Chats</span>
-          )
-        )}
+          ))}
         <div className="flex items-center gap-0.5">
           {!collapsed && (
             <Button
@@ -173,9 +169,7 @@ export function ChatSidebar({
             </Button>
           )}
           <Button
-            aria-label={
-              collapsed ? "Expand chat sidebar" : "Collapse chat sidebar"
-            }
+            aria-label={collapsed ? "Expand chat sidebar" : "Collapse chat sidebar"}
             className="size-8 shrink-0 rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             onClick={onToggle}
             size="icon"
@@ -252,14 +246,15 @@ export function ChatSidebar({
                             return;
                           }
 
-                          void window.groubot.browser.navigate(
-                            `groubot://group/${group.id}`,
-                          );
+                          void window.groubot.browser.navigate(`groubot://group/${group.id}`);
                         }}
                         type="button"
                       >
                         <UsersRound className="size-3.5 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate" title={group.name}>
+                        <span
+                          className="min-w-0 flex-1 truncate"
+                          title={group.name}
+                        >
                           {truncateTitle(group.name)}
                         </span>
                         {group.pinned && <Pin className="size-3 shrink-0 text-primary" />}
@@ -273,7 +268,9 @@ export function ChatSidebar({
                 </p>
               ) : (
                 sortedConversations.filter(matchesSearch).map((conversation) => {
-                  const conversationAgent = agents.find((agent) => agent.id === conversation.agentId);
+                  const conversationAgent = agents.find(
+                    (agent) => agent.id === conversation.agentId,
+                  );
                   return (
                     <div
                       className={`group flex min-h-[72px] items-center gap-3 rounded-2xl px-3 py-2 transition-[background-color,transform,box-shadow] duration-200 ${activeId === conversation.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:-translate-y-px hover:bg-accent hover:text-foreground"}`}
@@ -308,7 +305,10 @@ export function ChatSidebar({
                               />
                             )}
                             {conversationAgent?.isPinned && (
-                              <Pin aria-label="Pinned agent" className="size-3 text-primary" />
+                              <Pin
+                                aria-label="Pinned agent"
+                                className="size-3 text-primary"
+                              />
                             )}
                           </time>
                         </span>
@@ -335,8 +335,7 @@ export function ChatSidebar({
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This permanently removes the conversation and its local
-                  messages.
+                  This permanently removes the conversation and its local messages.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -345,9 +344,7 @@ export function ChatSidebar({
                   className="bg-destructive text-white hover:bg-destructive/90"
                   onClick={() => {
                     if (!deleteTarget) return;
-                    void onDelete(deleteTarget.id).then(() =>
-                      setDeleteTarget(undefined),
-                    );
+                    void onDelete(deleteTarget.id).then(() => setDeleteTarget(undefined));
                   }}
                 >
                   Delete chat
@@ -419,7 +416,12 @@ export function ChatSidebar({
                 value={groupRenameValue}
               />
               <DialogFooter>
-                <Button onClick={() => setGroupRenameTarget(undefined)} variant="ghost">Cancel</Button>
+                <Button
+                  onClick={() => setGroupRenameTarget(undefined)}
+                  variant="ghost"
+                >
+                  Cancel
+                </Button>
                 <Button
                   disabled={!groupRenameValue.trim() || !groupRenameTarget}
                   onClick={() => {
@@ -485,7 +487,5 @@ function formatTime(timestamp: number) {
 }
 
 function truncateMessage(message: string, maxLength = 20) {
-  return message.length > maxLength
-    ? `${message.slice(0, maxLength - 1)}…`
-    : message;
+  return message.length > maxLength ? `${message.slice(0, maxLength - 1)}…` : message;
 }

@@ -22,7 +22,10 @@ const questionParameters = {
   type: "object",
   properties: {
     title: { type: "string", description: "A short title for the question card." },
-    prompt: { type: "string", description: "A concise explanation of what the user needs to decide." },
+    prompt: {
+      type: "string",
+      description: "A concise explanation of what the user needs to decide.",
+    },
     questions: {
       type: "array",
       minItems: 1,
@@ -240,5 +243,7 @@ export function createWorkTools() {
 }
 
 function cleanCell(value: string): string {
-  return String(value).replace(/[|\n\r]/g, " ").trim();
+  return String(value)
+    .replace(/[|\n\r]/g, " ")
+    .trim();
 }

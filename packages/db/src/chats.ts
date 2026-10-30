@@ -4,12 +4,20 @@ export const conversationIdSchema = z.string().uuid();
 export const permissionModeSchema = z.enum(["ask", "full"]);
 export const chatMessageInputSchema = z.object({
   conversationId: conversationIdSchema,
-  content: z.string().trim().min(1, "Message cannot be empty.").max(100_000, "Message is too long."),
+  content: z
+    .string()
+    .trim()
+    .min(1, "Message cannot be empty.")
+    .max(100_000, "Message is too long."),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 export const renameConversationSchema = z.object({
   id: conversationIdSchema,
-  title: z.string().trim().min(1, "Give this chat a title.").max(120, "Keep chat titles under 120 characters."),
+  title: z
+    .string()
+    .trim()
+    .min(1, "Give this chat a title.")
+    .max(120, "Keep chat titles under 120 characters."),
 });
 
 export interface Conversation {
@@ -69,6 +77,10 @@ export interface ChatMessageMetadataBase {
 
 export type ChatMessageMetadata =
   | ({ type: "question"; question: ChatQuestion } & ChatMessageMetadataBase)
-  | ({ type: "question_answer"; questionId: string; answers: Record<string, string> } & ChatMessageMetadataBase)
+  | ({
+      type: "question_answer";
+      questionId: string;
+      answers: Record<string, string>;
+    } & ChatMessageMetadataBase)
   | ({ type: "reply"; replyTo: ChatMessageReference } & ChatMessageMetadataBase)
   | ({ type: "message" } & ChatMessageMetadataBase);

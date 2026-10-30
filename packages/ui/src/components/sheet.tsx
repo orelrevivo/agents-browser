@@ -24,8 +24,7 @@ export function SheetContent({
           "fixed z-50 flex flex-col gap-4 border bg-card shadow-xl outline-none",
           side === "right" &&
             "inset-y-0 right-0 h-full w-full border-l data-[state=closed]:animate-sheet-out data-[state=open]:animate-sheet-in sm:w-1/2",
-          side === "left" &&
-            "inset-y-0 left-0 h-full w-full border-r sm:w-1/2",
+          side === "left" && "inset-y-0 left-0 h-full w-full border-r sm:w-1/2",
           side === "top" && "inset-x-0 top-0 border-b",
           side === "bottom" && "inset-x-0 bottom-0 border-t",
           className,

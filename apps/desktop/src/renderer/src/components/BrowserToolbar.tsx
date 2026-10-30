@@ -10,18 +10,12 @@ import {
 } from "@groubot/ui";
 import { Bot } from "lucide-react";
 import type { RefObject } from "react";
-import type {
-  BrowserDownloadState,
-  BrowserState,
-} from "@groubot/browser/types";
+import type { BrowserDownloadState, BrowserState } from "@groubot/browser/types";
 import { Chevron, ReloadIcon, SearchIcon } from "./icons";
 import { ToolbarButton } from "./ToolbarButton";
 import { BrowserMenu } from "./BrowserMenu";
 import { DownloadsPanel } from "./DownloadsPanel";
-import {
-  SearchHistoryPanel,
-  type SearchHistoryEntry,
-} from "./SearchHistoryPanel";
+import { SearchHistoryPanel, type SearchHistoryEntry } from "./SearchHistoryPanel";
 
 export function BrowserToolbar({
   activeTab,
@@ -79,9 +73,7 @@ export function BrowserToolbar({
     // Measure after React has committed the panel. Measuring from the click
     // handler can read the previous DOM, which produced a tiny 70x4 native
     // overlay in sidebar layout and made the panel appear missing.
-    const panel = searchFieldRef.current?.querySelector<HTMLElement>(
-      "[data-search-history-panel]",
-    );
+    const panel = searchFieldRef.current?.querySelector<HTMLElement>("[data-search-history-panel]");
     if (!panel) return;
 
     let layoutRetries = 0;
@@ -158,10 +150,7 @@ export function BrowserToolbar({
               aria-label="Address and search bar"
               className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-xs shadow-none focus-visible:ring-0"
               onBlur={(event) => {
-                if (
-                  !event.currentTarget.value.trim() &&
-                  activeTab?.kind === "home"
-                )
+                if (!event.currentTarget.value.trim() && activeTab?.kind === "home")
                   onAddressChange("groubot://");
                 onEditingChange(false);
                 window.setTimeout(() => setSearchHistoryOpen(false), 120);

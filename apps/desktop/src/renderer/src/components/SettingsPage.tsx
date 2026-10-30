@@ -73,15 +73,16 @@ export function SettingsPage({
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
               Preferences
             </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-              Customize Groubot
-            </h1>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight">Customize Groubot</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Adjust the browser shell to match the way you work. Changes are
-              saved locally on this device.
+              Adjust the browser shell to match the way you work. Changes are saved locally on this
+              device.
             </p>
           </div>
-          <Button onClick={onBack} variant="outline">
+          <Button
+            onClick={onBack}
+            variant="outline"
+          >
             <ArrowLeft className="size-4" />
             Back to browser
           </Button>
@@ -227,9 +228,7 @@ function SettingsSection({
         </span>
         <div>
           <h2 className="text-sm font-semibold">{title}</h2>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {description}
-          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
         </div>
       </div>
       <Separator className="my-4" />

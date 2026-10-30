@@ -23,9 +23,7 @@ Operating principles:
 `;
 
 function avatar(name: string) {
-  const asset = marketplaceAgentAvatarAssets.find(
-    (candidate) => candidate.name === name,
-  );
+  const asset = marketplaceAgentAvatarAssets.find((candidate) => candidate.name === name);
 
   return {
     path: asset?.path ?? `/agents/marketplace/${name}.png`,
@@ -38,8 +36,7 @@ export const marketplaceAgents: MarketplaceAgentDefinition[] = [
     name: "Axel",
     role: "Sales strategist",
     badge: "Revenue",
-    description:
-      "Turns research and conversations into a focused, thoughtful sales workflow.",
+    description: "Turns research and conversations into a focused, thoughtful sales workflow.",
     benefits: [
       "Learns your product positioning",
       "Prepares outreach and call briefs",

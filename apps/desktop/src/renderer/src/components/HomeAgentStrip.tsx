@@ -10,12 +10,7 @@ interface HomeAgentStripProps {
   onSelect: (agentId: string) => void;
 }
 
-export function HomeAgentStrip({
-  agents,
-  selectedAgentId,
-  onAdd,
-  onSelect,
-}: HomeAgentStripProps) {
+export function HomeAgentStrip({ agents, selectedAgentId, onAdd, onSelect }: HomeAgentStripProps) {
   return (
     <div className="relative z-20 mt-[10px] flex shrink-0 justify-center px-4 pointer-events-auto">
       <div className="flex max-w-full min-w-0 items-center gap-1 overflow-x-auto rounded-full bg-card/70 p-1">
@@ -34,7 +29,10 @@ export function HomeAgentStrip({
               onClick={() => onSelect(agent.id)}
               type="button"
             >
-              <AgentAvatar agent={agent} size="sm" />
+              <AgentAvatar
+                agent={agent}
+                size="sm"
+              />
               <span className="max-w-32 truncate">{agent.name}</span>
             </button>
           );

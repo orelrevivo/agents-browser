@@ -1,8 +1,4 @@
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
@@ -32,10 +28,7 @@ import {
   type SkillInput,
 } from "@groubot/db";
 import { GroubotAgentRunner, type AgentStreamEvent } from "@groubot/ai";
-import {
-  BrowserRequestBridge,
-  type BrowserRequestOperation,
-} from "./browser-bridge.js";
+import { BrowserRequestBridge, type BrowserRequestOperation } from "./browser-bridge.js";
 
 export interface BackendServerOptions {
   port?: number;
@@ -59,14 +52,8 @@ type ActiveRun = {
 };
 
 export function createBackendServer(options: BackendServerOptions) {
-  const repositories = createRepositories(
-    options.databasePath,
-    options.migrationsFolder,
-  );
-  const runner = new GroubotAgentRunner(
-    options.apiKey,
-    options.model ?? "gpt-5.6-luna",
-  );
+  const repositories = createRepositories(options.databasePath, options.migrationsFolder);
+  const runner = new GroubotAgentRunner(options.apiKey, options.model ?? "gpt-5.6-luna");
   const browserBridge = new BrowserRequestBridge();
   const runs = new Map<string, ActiveRun>();
   const activeAgentRuns = new Map<string, string>();
@@ -104,8 +91,7 @@ export function createBackendServer(options: BackendServerOptions) {
       activeAgentRuns,
     ).catch((error: unknown) => {
       writeJson(response, 500, {
-        error:
-          error instanceof Error ? error.message : "Backend request failed",
+        error: error instanceof Error ? error.message : "Backend request failed",
       });
     });
   });
@@ -118,9 +104,7 @@ export function createBackendServer(options: BackendServerOptions) {
         server.listen(port, "127.0.0.1", () => {
           server.removeListener("error", reject);
           const address = server.address();
-          resolvePort(
-            typeof address === "object" && address ? address.port : port,
-          );
+          resolvePort(typeof address === "object" && address ? address.port : port);
         });
       });
     },
@@ -137,17 +121,12 @@ export function createBackendServer(options: BackendServerOptions) {
   };
 }
 
-export function startBackendFromEnvironment(): ReturnType<
-  typeof createBackendServer
-> {
+export function startBackendFromEnvironment(): ReturnType<typeof createBackendServer> {
   loadEnv();
   const root = resolve(process.cwd());
-  const databasePath =
-    process.env.GROUBOT_DATABASE_PATH ??
-    resolve(root, ".groubot", "groubot.db");
+  const databasePath = process.env.GROUBOT_DATABASE_PATH ?? resolve(root, ".groubot", "groubot.db");
   const migrationsFolder =
-    process.env.GROUBOT_MIGRATIONS_FOLDER ??
-    resolve(root, "packages/db/drizzle");
+    process.env.GROUBOT_MIGRATIONS_FOLDER ?? resolve(root, "packages/db/drizzle");
   return createBackendServer({
     port: Number(process.env.GROUBOT_BACKEND_PORT ?? 0),
     databasePath,
@@ -175,24 +154,15 @@ async function handleRequest(
   repositories: Repositories,
   options: BackendServerOptions,
   runner: GroubotAgentRunner,
-  runs: Map<
-    string,
-    ActiveRun
-  >,
+  runs: Map<string, ActiveRun>,
   browserBridge: BrowserRequestBridge,
   activeAgentRuns: Map<string, string>,
 ): Promise<void> {
   const origin = request.headers.origin;
   if (origin && /^http:\/\/127\.0\.0\.1(?::\d+)?$/.test(origin))
     response.setHeader("Access-Control-Allow-Origin", origin);
-  response.setHeader(
-    "Access-Control-Allow-Headers",
-    "content-type, x-groubot-session",
-  );
-  response.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-  );
+  response.setHeader("Access-Control-Allow-Headers", "content-type, x-groubot-session");
+  response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   response.setHeader("Vary", "Origin");
   if (request.method === "OPTIONS") {
     response.writeHead(204);
@@ -218,12 +188,7 @@ async function handleRequest(
     });
     return;
   }
-  if (
-    request.method === "GET" &&
-    parts[0] === "api" &&
-    parts[1] === "runs" &&
-    parts[2]
-  ) {
+  if (request.method === "GET" && parts[0] === "api" && parts[1] === "runs" && parts[2]) {
     const run = runs.get(parts[2]);
     if (!run) {
       writeJson(response, 404, { error: "Run not found" });
@@ -266,6 +231,16 @@ async function handleRequest(
     writeJson(response, 204, undefined);
     return;
   }
+  if (request.method === "POST" && url.pathname === "/api/browser/computer") {
+    const body = (await readJson(request)) as { conversationId?: string; tabId?: string | null };
+    if (!body?.conversationId) {
+      writeJson(response, 400, { error: "conversationId is required" });
+      return;
+    }
+    browserBridge.setComputerTab(body.conversationId, body.tabId ?? null);
+    writeJson(response, 204, undefined);
+    return;
+  }
   if (request.method === "POST" && url.pathname === "/api/browser/results") {
     const body = (await readJson(request)) as {
       requestId?: string;
@@ -279,14 +254,7 @@ async function handleRequest(
     }
     writeJson(
       response,
-      browserBridge.complete(
-        body.requestId,
-        body.ok === true,
-        body.result,
-        body.error,
-      )
-        ? 204
-        : 404,
+      browserBridge.complete(body.requestId, body.ok === true, body.result, body.error) ? 204 : 404,
       undefined,
     );
     return;
@@ -301,9 +269,7 @@ async function handleRequest(
     const body = (await readJson(request)) as { approved?: boolean };
     writeJson(
       response,
-      browserBridge.respondApproval(parts[3], body?.approved === true)
-        ? 204
-        : 404,
+      browserBridge.respondApproval(parts[3], body?.approved === true) ? 204 : 404,
       undefined,
     );
     return;
@@ -385,17 +351,13 @@ async function handleSkills(
     if (!/^https:\/\/github\.com\/.+\/blob\/.+\.md(?:\?.*)?$/i.test(url)) {
       throw new Error("Use a direct HTTPS GitHub Markdown file URL.");
     }
-    const rawUrl = url
-      .replace("github.com/", "raw.githubusercontent.com/")
-      .replace("/blob/", "/");
+    const rawUrl = url.replace("github.com/", "raw.githubusercontent.com/").replace("/blob/", "/");
     const githubResponse = await fetch(rawUrl, {
       signal: AbortSignal.timeout(15_000),
     });
-    if (!githubResponse.ok)
-      throw new Error(`GitHub returned ${githubResponse.status}.`);
+    if (!githubResponse.ok) throw new Error(`GitHub returned ${githubResponse.status}.`);
     const content = await githubResponse.text();
-    if (content.length > 200_000)
-      throw new Error("The skill file is too large.");
+    if (content.length > 200_000) throw new Error("The skill file is too large.");
     const input = skillInputSchema.parse({
       name: (body as { name?: unknown })?.name,
       description: (body as { description?: unknown })?.description,
@@ -408,11 +370,7 @@ async function handleSkills(
     return;
   }
   if (request.method === "POST" && !id) {
-    writeJson(
-      response,
-      201,
-      repository.create(skillInputSchema.parse(body) as SkillInput),
-    );
+    writeJson(response, 201, repository.create(skillInputSchema.parse(body) as SkillInput));
     return;
   }
   if (request.method === "DELETE" && id) {
@@ -578,11 +536,7 @@ async function handleAgents(
     return;
   }
   if (request.method === "PUT") {
-    writeJson(
-      response,
-      200,
-      repository.update(validId, agentInputSchema.parse(body)),
-    );
+    writeJson(response, 200, repository.update(validId, agentInputSchema.parse(body)));
     return;
   }
   if (request.method === "POST" && parts[1] === "duplicate") {
@@ -630,10 +584,7 @@ async function handleChats(
   parts: string[],
   body: unknown,
   runner: GroubotAgentRunner,
-  runs: Map<
-    string,
-    ActiveRun
-  >,
+  runs: Map<string, ActiveRun>,
   browserBridge: BrowserRequestBridge,
   activeAgentRuns: Map<string, string>,
 ): Promise<void> {
@@ -662,8 +613,7 @@ async function handleChats(
     );
     return;
   }
-  if (!id)
-    return writeJson(response, 400, { error: "Conversation id is required" });
+  if (!id) return writeJson(response, 400, { error: "Conversation id is required" });
   const validId = conversationIdSchema.parse(id);
   if (request.method === "GET") {
     writeJson(response, 200, repository.get(validId) ?? null);
@@ -720,10 +670,7 @@ async function handleChats(
       writeJson(
         response,
         200,
-        repository.setPermissionMode(
-          validId,
-          permissionModeSchema.parse(value?.permissionMode),
-        ),
+        repository.setPermissionMode(validId, permissionModeSchema.parse(value?.permissionMode)),
       );
       return;
     }
@@ -746,9 +693,7 @@ async function handleChats(
     writeJson(
       response,
       200,
-      repository.rename(
-        renameConversationSchema.parse({ ...(body as object), id: validId }),
-      ),
+      repository.rename(renameConversationSchema.parse({ ...(body as object), id: validId })),
     );
     return;
   }
@@ -767,10 +712,7 @@ async function executeChatRun(
   content: string,
   repositories: Repositories,
   runner: GroubotAgentRunner,
-  runs: Map<
-    string,
-    ActiveRun
-  >,
+  runs: Map<string, ActiveRun>,
   browserBridge: BrowserRequestBridge,
   activeAgentRuns: Map<string, string>,
 ): Promise<void> {
@@ -778,20 +720,11 @@ async function executeChatRun(
   if (!run) return;
   try {
     const conversation = repositories.chats.get(conversationId);
-    if (!conversation)
-      throw new Error("Conversation not found.");
+    if (!conversation) throw new Error("Conversation not found.");
 
-    const group = conversation.groupId
-      ? repositories.groups.get(conversation.groupId)
-      : undefined;
-    const agents = resolveAgentsForMessage(
-      conversation,
-      group,
-      content,
-      repositories,
-    );
-    if (agents.length === 0)
-      throw new Error("Select an agent before sending a message.");
+    const group = conversation.groupId ? repositories.groups.get(conversation.groupId) : undefined;
+    const agents = resolveAgentsForMessage(conversation, group, content, repositories);
+    if (agents.length === 0) throw new Error("Select an agent before sending a message.");
 
     const agentIds = agents.map((agent) => agent.id).sort();
     run.agentIds = agentIds;
@@ -806,8 +739,7 @@ async function executeChatRun(
     if (!activeConversation) throw new Error("Conversation not found.");
 
     const history = activeConversation.messages.map((message) => {
-      const replyTo =
-        message.metadata?.type === "reply" ? message.metadata.replyTo : undefined;
+      const replyTo = message.metadata?.type === "reply" ? message.metadata.replyTo : undefined;
       const content = replyTo
         ? `Replying to ${replyTo.role === "assistant" ? "the assistant" : "the user"}:\n> ${replyTo.content}\n\n${message.content}`
         : message.content;
@@ -822,12 +754,11 @@ async function executeChatRun(
         description: skill.description,
         content: skill.content,
       }));
-    const browserHost = createBrowserToolHost(browserBridge);
+    const browserHost = createBrowserToolHost(browserBridge, conversationId);
+    const workspaceHost = createWorkspaceToolHost(browserBridge);
     for (const agent of agents) {
       const memories = agent.memoryPreferences.enabled
-        ? repositories.memories
-            .relevant(agent.id, content)
-            .map((memory) => memory.content)
+        ? repositories.memories.relevant(agent.id, content).map((memory) => memory.content)
         : [];
 
       for await (const event of runner.run(
@@ -852,6 +783,7 @@ async function executeChatRun(
         new AbortController().signal,
         {
           browserHost,
+          workspaceHost,
           approveBrowserAction: async (approval) => {
             if (activeConversation.permissionMode === "full") return true;
             const pending = browserBridge.requestApproval();
@@ -864,8 +796,7 @@ async function executeChatRun(
             } as never);
             return pending.promise;
           },
-          onBrowserActivity: (activity) =>
-            run.events.push({ type: "tool_activity", ...activity }),
+          onBrowserActivity: (activity) => run.events.push({ type: "tool_activity", ...activity }),
         },
       )) {
         if (event.type === "question") {
@@ -905,15 +836,11 @@ async function executeChatRun(
     run.events.push({
       type: "error",
       code: "unknown",
-      message:
-        error instanceof Error
-          ? error.message
-          : "The chat could not be completed.",
+      message: error instanceof Error ? error.message : "The chat could not be completed.",
     });
   } finally {
     for (const agentId of run.agentIds) {
-      if (activeAgentRuns.get(agentId) === requestId)
-        activeAgentRuns.delete(agentId);
+      if (activeAgentRuns.get(agentId) === requestId) activeAgentRuns.delete(agentId);
     }
     run.done = true;
   }
@@ -996,9 +923,7 @@ function nextAutomationRunAt(
   const [hour, minute] = task.timeOfDay.split(":").map(Number);
   const localNow = getTimeZoneParts(new Date(from), task.timezone);
   for (let dayOffset = 0; dayOffset <= 8; dayOffset += 1) {
-    const day = new Date(
-      Date.UTC(localNow.year, localNow.month - 1, localNow.day + dayOffset),
-    );
+    const day = new Date(Date.UTC(localNow.year, localNow.month - 1, localNow.day + dayOffset));
     if (task.frequency === "weekly" && day.getUTCDay() !== task.weeklyDay) continue;
     const candidate = fromLocalTime(
       {
@@ -1030,13 +955,7 @@ function fromLocalTime(
   local: { year: number; month: number; day: number; hour: number; minute: number },
   timeZone: string,
 ): number {
-  const utcGuess = Date.UTC(
-    local.year,
-    local.month - 1,
-    local.day,
-    local.hour,
-    local.minute,
-  );
+  const utcGuess = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute);
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
@@ -1047,7 +966,13 @@ function fromLocalTime(
     hourCycle: "h23",
   }).formatToParts(new Date(utcGuess));
   const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
-  const represented = Date.UTC(value("year"), value("month") - 1, value("day"), value("hour"), value("minute"));
+  const represented = Date.UTC(
+    value("year"),
+    value("month") - 1,
+    value("day"),
+    value("hour"),
+    value("minute"),
+  );
   return utcGuess + (utcGuess - represented);
 }
 
@@ -1058,10 +983,18 @@ function formatQuestionMessage(question: ChatQuestion): string {
 function extractQuestionResponse(content: string): ChatQuestion | undefined {
   const normalized = content.replace(/\*\*/g, "").trim();
   const optionPrefix = /^\s*(?:[-*•]|[A-Z][.)]|\d+[.)]|[⚪○◯🔘])\s*/u;
-  const lines = normalized.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   const options = lines
-    .map((line) => line.match(optionPrefix)?.[0] ? line.replace(optionPrefix, "") : undefined)
-    .map((label) => label?.replace(/\*\*/g, "").replace(/^[⚪○◯🔘🔴🟢🔵]\s*/u, "").trim())
+    .map((line) => (line.match(optionPrefix)?.[0] ? line.replace(optionPrefix, "") : undefined))
+    .map((label) =>
+      label
+        ?.replace(/\*\*/g, "")
+        .replace(/^[⚪○◯🔘🔴🟢🔵]\s*/u, "")
+        .trim(),
+    )
     .filter((label): label is string => Boolean(label))
     .map((label, index) => ({ id: `option-${index + 1}`, label }));
   if (options.length < 2) return undefined;
@@ -1094,9 +1027,7 @@ function resolveAgentsForMessage(
   repositories: Repositories,
 ) {
   if (!group) {
-    const agent = conversation.agentId
-      ? repositories.agents.get(conversation.agentId)
-      : undefined;
+    const agent = conversation.agentId ? repositories.agents.get(conversation.agentId) : undefined;
     return agent ? [agent] : [];
   }
 
@@ -1108,10 +1039,7 @@ function resolveAgentsForMessage(
   if (everyoneMentioned) return groupAgents;
 
   const namedAgents = groupAgents.filter((agent) => {
-    const mention = new RegExp(
-      `(^|\\s)@${escapeRegExp(agent.name)}(?=\\s|$)`,
-      "i",
-    );
+    const mention = new RegExp(`(^|\\s)@${escapeRegExp(agent.name)}(?=\\s|$)`, "i");
     return mention.test(content);
   });
   if (namedAgents.length > 0) return namedAgents;
@@ -1126,13 +1054,28 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&");
 }
 
-function createBrowserToolHost(bridge: BrowserRequestBridge) {
+function createBrowserToolHost(bridge: BrowserRequestBridge, conversationId?: string) {
   const call = (operation: BrowserRequestOperation, payload: unknown) =>
     bridge.enqueue(operation, payload).promise;
+  const computerTab = () => bridge.computerTab(conversationId);
+  const scopedTab = (tabId: string) => computerTab() ?? tabId;
   return {
-    listTabs: () => call("list_tabs", {}),
-    attachTab: (tabId: string) => call("attach_tab", { tabId }),
+    listTabs: async () => {
+      const tabs = await call("list_tabs", {});
+      const id = computerTab();
+      return id && Array.isArray(tabs)
+        ? tabs.filter(
+            (tab) => tab && typeof tab === "object" && (tab as { id?: unknown }).id === id,
+          )
+        : tabs;
+    },
+    attachTab: (tabId: string) => call("attach_tab", { tabId: scopedTab(tabId) }),
     openTab: async (url?: string) => {
+      const existing = computerTab();
+      if (existing) {
+        await call("navigate", { tabId: existing, url: url ?? "https://www.google.com/" });
+        return existing;
+      }
       const result = await call("open_tab", { url: url ?? null });
       if (
         !result ||
@@ -1142,18 +1085,27 @@ function createBrowserToolHost(bridge: BrowserRequestBridge) {
         throw new Error("Browser did not return the new tab id.");
       return (result as { tabId: string }).tabId;
     },
-    navigateTab: (tabId: string, url: string) =>
-      call("navigate", { tabId, url }),
-    getPageContent: (tabId: string) => call("get_page_content", { tabId }),
-    getPageTitle: (tabId: string) => call("get_page_title", { tabId }),
-    inspectPage: (tabId: string) => call("inspect_page", { tabId }),
-    captureScreenshot: (tabId: string) => call("capture_screenshot", { tabId }),
+    navigateTab: (tabId: string, url: string) => call("navigate", { tabId: scopedTab(tabId), url }),
+    getPageContent: (tabId: string) => call("get_page_content", { tabId: scopedTab(tabId) }),
+    getPageTitle: (tabId: string) => call("get_page_title", { tabId: scopedTab(tabId) }),
+    inspectPage: (tabId: string) => call("inspect_page", { tabId: scopedTab(tabId) }),
+    captureScreenshot: (tabId: string) => call("capture_screenshot", { tabId: scopedTab(tabId) }),
     clickElement: (tabId: string, selector: string) =>
-      call("click_element", { tabId, selector }),
+      call("click_element", { tabId: scopedTab(tabId), selector }),
     typeText: (tabId: string, selector: string, text: string) =>
-      call("type_text", { tabId, selector, text }),
+      call("type_text", { tabId: scopedTab(tabId), selector, text }),
     scrollPage: (tabId: string, direction: "up" | "down", amount = 600) =>
-      call("scroll_page", { tabId, direction, amount }),
+      call("scroll_page", { tabId: scopedTab(tabId), direction, amount }),
+  };
+}
+
+function createWorkspaceToolHost(bridge: BrowserRequestBridge) {
+  const call = (operation: BrowserRequestOperation, payload: unknown) =>
+    bridge.enqueue(operation, payload, 60_000).promise;
+  return {
+    listFiles: () => call("workspace_list_files", {}),
+    readFile: (path: string) => call("workspace_read_file", { path }),
+    writeFile: (path: string, content: string) => call("workspace_write_file", { path, content }),
   };
 }
 
@@ -1164,11 +1116,7 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   return raw ? JSON.parse(raw) : undefined;
 }
 
-function writeJson(
-  response: ServerResponse,
-  status: number,
-  value: unknown,
-): void {
+function writeJson(response: ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
   });
@@ -1180,8 +1128,6 @@ if (process.argv[1]?.endsWith("server.ts")) {
   void backend
     .listen()
     .then((port) =>
-      console.log(
-        JSON.stringify({ type: "backend-ready", port, session: randomUUID() }),
-      ),
+      console.log(JSON.stringify({ type: "backend-ready", port, session: randomUUID() })),
     );
 }

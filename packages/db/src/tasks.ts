@@ -1,7 +1,15 @@
 import { z } from "zod";
 
 export const browserTaskIdSchema = z.string().uuid();
-export const browserTaskStatusSchema = z.enum(["queued", "running", "waiting_for_approval", "waiting_for_human", "completed", "failed", "cancelled"]);
+export const browserTaskStatusSchema = z.enum([
+  "queued",
+  "running",
+  "waiting_for_approval",
+  "waiting_for_human",
+  "completed",
+  "failed",
+  "cancelled",
+]);
 export const browserTaskCreateSchema = z.object({
   conversationId: z.string().uuid().nullable().optional(),
   agentId: z.string().uuid().nullable().optional(),
